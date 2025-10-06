@@ -1,4 +1,4 @@
-﻿import { Vector3 } from "three";
+import { Vector3 } from "three";
 import type { GameLoopStats } from "@app/core/gameLoop";
 import { GameLoop } from "@app/core/gameLoop";
 import { DebugControls } from "@app/debug/debugControls";
@@ -9,11 +9,16 @@ import { createArena } from "@app/rendering/arenaScene";
 import type { RenderContext } from "@app/rendering/createRenderContext";
 import { createRenderContext, resizeRenderer } from "@app/rendering/createRenderContext";
 import { PlayerToken } from "@app/rendering/playerToken";
-
-const PLAYER_MAX_SPEED = 6;
-const PLAYER_ACCELERATION = 24;
-const PLAYER_FRICTION = 18;
-const VELOCITY_EPSILON = 0.01;
+import type { Entity } from "@app/entities/entity";
+import { EntityWorld } from "@app/entities/world";
+import type { MotionComponent } from "@app/entities/components/motion";
+import { MotionComponentType } from "@app/entities/components/motion";
+import type { TransformComponent } from "@app/entities/components/transform";
+import { TransformComponentType } from "@app/entities/components/transform";
+import { MovementSystem } from "@app/entities/systems/movementSystem";
+import { TelegraphSystem } from "@app/entities/systems/telegraphSystem";
+import { CollisionSystem } from "@app/entities/systems/collisionSystem";
+import { PlayerBlueprint } from "@app/entities/examples/entityShowcase";
 
 export interface GameStatsListener {
   (stats: { fps: number; rawDelta: number }): void;
@@ -24,14 +29,15 @@ export class ShatterGame {
   private readonly loop: GameLoop;
   private readonly keyboard = new KeyboardController();
   private readonly player: PlayerToken;
-  private readonly velocity = new Vector3();
   private readonly direction = new Vector3();
-  private readonly targetVelocity = new Vector3();
-  private readonly stepVector = new Vector3();
   private readonly playerPosition = new Vector3();
   private readonly origin = new Vector3(0, 0, 0);
   private readonly overlay: DebugOverlay;
   private readonly debugControls: DebugControls;
+  private readonly world = new EntityWorld();
+  private readonly playerEntity: Entity;
+  private readonly playerTransform: TransformComponent;
+  private readonly playerMotion: MotionComponent;
   private statsListener: GameStatsListener | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement, private readonly host: HTMLElement) {
@@ -39,6 +45,16 @@ export class ShatterGame {
     this.player = new PlayerToken();
     this.ctx.scene.add(createArena());
     this.ctx.scene.add(this.player.mesh);
+
+    this.world.addSystem(new MovementSystem());
+    this.world.addSystem(new TelegraphSystem());
+    this.world.addSystem(new CollisionSystem());
+
+    this.playerEntity = this.world.spawn(PlayerBlueprint);
+    this.playerTransform = this.playerEntity.get(TransformComponentType);
+    this.playerMotion = this.playerEntity.get(MotionComponentType);
+    this.player.teleport(this.playerTransform.position);
+    this.playerPosition.copy(this.playerTransform.position);
 
     this.loop = new GameLoop(this.update);
     this.loop.setStatsListener(this.handleLoopStats);
@@ -79,7 +95,7 @@ export class ShatterGame {
       fps: stats.fps,
       deltaMs: stats.rawDelta * 1000,
       position: { x: this.playerPosition.x, z: this.playerPosition.z },
-      speed: this.velocity.length()
+      speed: this.playerMotion.velocity.length()
     });
 
     if (this.statsListener) {
@@ -99,24 +115,17 @@ export class ShatterGame {
 
     if (this.direction.lengthSq() > 0) {
       this.direction.normalize();
-      this.targetVelocity.copy(this.direction).multiplyScalar(PLAYER_MAX_SPEED);
-      const lerpFactor = 1 - Math.exp(-PLAYER_ACCELERATION * deltaTime);
-      this.velocity.lerp(this.targetVelocity, lerpFactor);
+      this.playerMotion.targetVelocity.copy(this.direction).multiplyScalar(this.playerMotion.maxSpeed);
     } else {
-      const damping = Math.exp(-PLAYER_FRICTION * deltaTime);
-      this.velocity.multiplyScalar(damping);
-      if (this.velocity.lengthSq() < VELOCITY_EPSILON * VELOCITY_EPSILON) {
-        this.velocity.set(0, 0, 0);
-      }
+      this.playerMotion.targetVelocity.set(0, 0, 0);
     }
 
-    this.stepVector.copy(this.velocity).multiplyScalar(deltaTime);
-    if (this.stepVector.lengthSq() > 0) {
-      this.player.move(this.stepVector);
-    }
+    this.world.update(deltaTime);
 
-    this.player.getPosition(this.playerPosition);
+    this.playerPosition.copy(this.playerTransform.position);
     this.enforceArenaBounds();
+    this.player.teleport(this.playerPosition);
+
     this.ctx.renderer.render(this.ctx.scene, this.ctx.camera);
   };
 
@@ -126,34 +135,35 @@ export class ShatterGame {
 
     if (this.playerPosition.x < minX) {
       this.playerPosition.x = minX;
-      this.velocity.x = Math.max(this.velocity.x, 0);
+      if (this.playerMotion.velocity.x < 0) this.playerMotion.velocity.x = 0;
       clamped = true;
     } else if (this.playerPosition.x > maxX) {
       this.playerPosition.x = maxX;
-      this.velocity.x = Math.min(this.velocity.x, 0);
+      if (this.playerMotion.velocity.x > 0) this.playerMotion.velocity.x = 0;
       clamped = true;
     }
 
     if (this.playerPosition.z < minZ) {
       this.playerPosition.z = minZ;
-      this.velocity.z = Math.max(this.velocity.z, 0);
+      if (this.playerMotion.velocity.z < 0) this.playerMotion.velocity.z = 0;
       clamped = true;
     } else if (this.playerPosition.z > maxZ) {
       this.playerPosition.z = maxZ;
-      this.velocity.z = Math.min(this.velocity.z, 0);
+      if (this.playerMotion.velocity.z > 0) this.playerMotion.velocity.z = 0;
       clamped = true;
     }
 
     if (clamped) {
-      this.player.teleport(this.playerPosition);
+      this.playerTransform.position.copy(this.playerPosition);
     }
   }
 
   private resetPlayer() {
-    this.velocity.set(0, 0, 0);
+    this.playerMotion.velocity.set(0, 0, 0);
+    this.playerMotion.targetVelocity.set(0, 0, 0);
+    this.playerTransform.position.copy(this.origin);
+    this.playerPosition.copy(this.origin);
     this.player.teleport(this.origin);
-    this.player.getPosition(this.playerPosition);
     this.enforceArenaBounds();
   }
 }
-
