@@ -1,0 +1,10 @@
+﻿export const ARENA_SIZE = 20;
+export const ARENA_HALF_SIZE = ARENA_SIZE / 2;
+export const ARENA_PADDING = 0.5;
+
+export const ARENA_BOUNDS = Object.freeze({
+  minX: -ARENA_HALF_SIZE + ARENA_PADDING,
+  maxX: ARENA_HALF_SIZE - ARENA_PADDING,
+  minZ: -ARENA_HALF_SIZE + ARENA_PADDING,
+  maxZ: ARENA_HALF_SIZE - ARENA_PADDING
+});
