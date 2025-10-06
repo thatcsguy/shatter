@@ -4,6 +4,9 @@ export type MovementInput = {
   left: boolean;
   right: boolean;
   ability1: boolean;
+  ability2: boolean;
+  ability3: boolean;
+  ability4: boolean;
 };
 
 const DEFAULT_INPUT: MovementInput = {
@@ -11,7 +14,10 @@ const DEFAULT_INPUT: MovementInput = {
   down: false,
   left: false,
   right: false,
-  ability1: false
+  ability1: false,
+  ability2: false,
+  ability3: false,
+  ability4: false
 };
 
 export class KeyboardController {
@@ -30,6 +36,9 @@ export class KeyboardController {
   snapshot(): MovementInput {
     const snapshot = { ...this.state };
     this.state.ability1 = false;
+    this.state.ability2 = false;
+    this.state.ability3 = false;
+    this.state.ability4 = false;
     return snapshot;
   }
 
@@ -63,6 +72,21 @@ export class KeyboardController {
       case "Digit1":
         if (pressed) {
           this.state.ability1 = true;
+        }
+        break;
+      case "Digit2":
+        if (pressed) {
+          this.state.ability2 = true;
+        }
+        break;
+      case "Digit3":
+        if (pressed) {
+          this.state.ability3 = true;
+        }
+        break;
+      case "Digit4":
+        if (pressed) {
+          this.state.ability4 = true;
         }
         break;
       default:
