@@ -21,7 +21,9 @@ import { TelegraphSystem } from "@app/entities/systems/telegraphSystem";
 import { CollisionSystem } from "@app/entities/systems/collisionSystem";
 import { PlayerBlueprint } from "@app/entities/examples/entityShowcase";
 import { Marksman } from "@app/core/classes/marksman";
+import type { MarksmanGaugeStatus, ProjectileSpawnOptions } from "@app/core/classes/marksman";
 import { AbilityHud } from "@app/core/abilityHud";
+import type { AbilityHudState } from "@app/core/abilityHud";
 
 interface ProjectileInstance {
   mesh: Mesh;
@@ -93,7 +95,7 @@ export class ShatterGame {
       resetPlayer: () => this.resetPlayer()
     });
 
-    this.abilityHud = new AbilityHud(host, this.marksman.getAbilityStatuses());
+    this.abilityHud = new AbilityHud(host, this.getAbilityHudState());
 
     window.addEventListener("resize", this.handleResize);
   }
@@ -172,7 +174,7 @@ export class ShatterGame {
       });
     });
 
-    this.abilityHud.update(this.marksman.getAbilityStatuses());
+    this.abilityHud.update(this.getAbilityHudState());
 
     this.updateProjectiles(deltaTime);
 
@@ -218,15 +220,36 @@ export class ShatterGame {
     this.enforceArenaBounds();
   }
 
-  private readonly spawnProjectile = (origin: Vector3, velocity: Vector3) => {
+  private readonly spawnProjectile = (
+    origin: Vector3,
+    velocity: Vector3,
+    options?: ProjectileSpawnOptions
+  ) => {
     const mesh = new Mesh(this.projectileGeometry, this.projectileMaterial);
     const position = new Vector3(origin.x, 0.25, origin.z);
     const direction = new Vector3().copy(velocity);
     direction.y = 0;
     mesh.position.set(position.x, position.y, position.z);
+    mesh.scale.setScalar(options?.scale ?? 1);
     this.ctx.scene.add(mesh);
     this.projectiles.push({ mesh, position, velocity: direction, lifetime: 2 });
   };
+
+  private getAbilityHudState(): AbilityHudState {
+    const gauge = this.marksman.getGaugeStatus();
+    return {
+      abilities: this.marksman.getAbilityStatuses(),
+      gauge: this.mapGaugeStatus(gauge)
+    };
+  }
+
+  private mapGaugeStatus(gauge: MarksmanGaugeStatus): AbilityHudState["gauge"] {
+    return {
+      type: "bar",
+      current: gauge.current,
+      max: gauge.max
+    };
+  }
 
   private updateProjectiles(deltaTime: number) {
     for (let i = this.projectiles.length - 1; i >= 0; i -= 1) {

@@ -27,11 +27,45 @@ canvas {
   display: block;
 }
 
-.ability-bar {
+.ability-hud {
   position: absolute;
   left: 50%;
   bottom: 24px;
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.class-gauge {
+  min-width: 284px;
+  display: flex;
+  justify-content: center;
+  padding: 0 8px;
+  visibility: hidden;
+}
+
+.class-gauge__track {
+  width: 100%;
+  max-width: 320px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+  overflow: hidden;
+  position: relative;
+}
+
+.class-gauge__fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: linear-gradient(90deg, #38bdf8, #22d3ee);
+  transition: width 0.2s ease-out;
+}
+
+.ability-bar {
   display: flex;
   gap: 12px;
   padding: 8px 12px;
