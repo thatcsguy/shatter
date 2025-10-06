@@ -10,7 +10,6 @@ import { createArena } from "@app/rendering/arenaScene";
 import type { RenderContext } from "@app/rendering/createRenderContext";
 import { createRenderContext, resizeRenderer } from "@app/rendering/createRenderContext";
 import { PlayerToken } from "@app/rendering/playerToken";
-import type { TrainingDummy } from "@app/rendering/trainingDummy";
 import type { Entity } from "@app/entities/entity";
 import { EntityWorld } from "@app/entities/world";
 import type { MotionComponent } from "@app/entities/components/motion";
@@ -40,12 +39,12 @@ export class ShatterGame {
   private readonly keyboard = new KeyboardController();
   private readonly encounter = DEFAULT_ENCOUNTER;
   private readonly player: PlayerToken;
-  private readonly dummy: TrainingDummy;
+  private readonly boss = this.encounter.boss.create();
   private readonly marksman = new Marksman();
   private readonly direction = new Vector3();
   private readonly playerPosition = new Vector3();
   private readonly spawnPosition = new Vector3(-5, 0, 0);
-  private readonly dummyPosition = new Vector3();
+  private readonly bossPosition = new Vector3();
   private readonly projectileGeometry = new SphereGeometry(0.14, 12, 12);
   private readonly projectileMaterial = new MeshBasicMaterial({ color: 0xfef08a });
   private readonly projectileScratch = new Vector3();
@@ -63,13 +62,12 @@ export class ShatterGame {
     this.player = new PlayerToken();
 
     const bossConfig = this.encounter.boss;
-    this.dummy = bossConfig.create();
     this.ctx.scene.add(createArena());
-    this.ctx.scene.add(this.dummy.mesh);
+    this.ctx.scene.add(this.boss.mesh);
     this.ctx.scene.add(this.player.mesh);
 
-    this.dummyPosition.copy(bossConfig.initialPosition);
-    this.dummy.teleport(this.dummyPosition);
+    this.bossPosition.copy(bossConfig.initialPosition);
+    this.boss.teleport(this.bossPosition);
 
     this.world.addSystem(new MovementSystem());
     this.world.addSystem(new TelegraphSystem());
@@ -110,7 +108,7 @@ export class ShatterGame {
     this.debugControls.dispose();
     this.overlay.dispose();
     this.clearProjectiles();
-    this.ctx.scene.remove(this.dummy.mesh);
+    this.ctx.scene.remove(this.boss.mesh);
     this.projectileGeometry.dispose();
     this.projectileMaterial.dispose();
     window.removeEventListener("resize", this.handleResize);
@@ -159,7 +157,7 @@ export class ShatterGame {
     if (input.ability1) {
       this.marksman.tryFire({
         playerPosition: this.playerPosition,
-        enemyPosition: this.dummyPosition,
+        enemyPosition: this.bossPosition,
         spawnProjectile: this.spawnProjectile
       });
     }
@@ -229,7 +227,7 @@ export class ShatterGame {
         continue;
       }
 
-      this.projectileScratch.copy(projectile.position).sub(this.dummyPosition);
+      this.projectileScratch.copy(projectile.position).sub(this.bossPosition);
       this.projectileScratch.y = 0;
       if (this.projectileScratch.lengthSq() < 0.35 * 0.35) {
         this.removeProjectile(i);
