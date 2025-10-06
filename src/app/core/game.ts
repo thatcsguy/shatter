@@ -21,6 +21,7 @@ import { TelegraphSystem } from "@app/entities/systems/telegraphSystem";
 import { CollisionSystem } from "@app/entities/systems/collisionSystem";
 import { PlayerBlueprint } from "@app/entities/examples/entityShowcase";
 import { Marksman } from "@app/core/classes/marksman";
+import { AbilityHud } from "@app/core/abilityHud";
 
 interface ProjectileInstance {
   mesh: Mesh;
@@ -51,6 +52,7 @@ export class ShatterGame {
   private readonly projectiles: ProjectileInstance[] = [];
   private readonly overlay: DebugOverlay;
   private readonly debugControls: DebugControls;
+  private readonly abilityHud: AbilityHud;
   private readonly world = new EntityWorld();
   private readonly playerEntity: Entity;
   private readonly playerTransform: TransformComponent;
@@ -91,6 +93,8 @@ export class ShatterGame {
       resetPlayer: () => this.resetPlayer()
     });
 
+    this.abilityHud = new AbilityHud(host, this.marksman.getAbilityStatuses());
+
     window.addEventListener("resize", this.handleResize);
   }
 
@@ -107,6 +111,7 @@ export class ShatterGame {
     this.keyboard.dispose();
     this.debugControls.dispose();
     this.overlay.dispose();
+    this.abilityHud.dispose();
     this.clearProjectiles();
     this.ctx.scene.remove(this.boss.mesh);
     this.projectileGeometry.dispose();
@@ -150,17 +155,24 @@ export class ShatterGame {
 
     this.world.update(deltaTime);
 
+    this.marksman.update(deltaTime);
+
     this.playerPosition.copy(this.playerTransform.position);
     this.enforceArenaBounds();
     this.player.teleport(this.playerPosition);
 
-    if (input.ability1) {
-      this.marksman.tryFire({
+    const abilityInputs = [input.ability1, input.ability2, input.ability3, input.ability4];
+    abilityInputs.forEach((pressed, index) => {
+      if (!pressed) return;
+
+      this.marksman.tryUseAbility(index, {
         playerPosition: this.playerPosition,
         enemyPosition: this.bossPosition,
         spawnProjectile: this.spawnProjectile
       });
-    }
+    });
+
+    this.abilityHud.update(this.marksman.getAbilityStatuses());
 
     this.updateProjectiles(deltaTime);
 
