@@ -1,4 +1,4 @@
-import { Vector3 } from "three";
+import { Mesh, MeshBasicMaterial, SphereGeometry, Vector3 } from "three";
 import type { GameLoopStats } from "@app/core/gameLoop";
 import { GameLoop } from "@app/core/gameLoop";
 import { DebugControls } from "@app/debug/debugControls";
@@ -9,6 +9,7 @@ import { createArena } from "@app/rendering/arenaScene";
 import type { RenderContext } from "@app/rendering/createRenderContext";
 import { createRenderContext, resizeRenderer } from "@app/rendering/createRenderContext";
 import { PlayerToken } from "@app/rendering/playerToken";
+import { TrainingDummy } from "@app/rendering/trainingDummy";
 import type { Entity } from "@app/entities/entity";
 import { EntityWorld } from "@app/entities/world";
 import type { MotionComponent } from "@app/entities/components/motion";
@@ -19,6 +20,14 @@ import { MovementSystem } from "@app/entities/systems/movementSystem";
 import { TelegraphSystem } from "@app/entities/systems/telegraphSystem";
 import { CollisionSystem } from "@app/entities/systems/collisionSystem";
 import { PlayerBlueprint } from "@app/entities/examples/entityShowcase";
+import { Marksman } from "@app/core/marksman";
+
+interface ProjectileInstance {
+  mesh: Mesh;
+  position: Vector3;
+  velocity: Vector3;
+  lifetime: number;
+}
 
 export interface GameStatsListener {
   (stats: { fps: number; rawDelta: number }): void;
@@ -29,9 +38,16 @@ export class ShatterGame {
   private readonly loop: GameLoop;
   private readonly keyboard = new KeyboardController();
   private readonly player: PlayerToken;
+  private readonly dummy: TrainingDummy;
+  private readonly marksman = new Marksman();
   private readonly direction = new Vector3();
   private readonly playerPosition = new Vector3();
-  private readonly origin = new Vector3(0, 0, 0);
+  private readonly spawnPosition = new Vector3(-5, 0, 0);
+  private readonly dummyPosition = new Vector3(0, 0, 0);
+  private readonly projectileGeometry = new SphereGeometry(0.14, 12, 12);
+  private readonly projectileMaterial = new MeshBasicMaterial({ color: 0xfef08a });
+  private readonly projectileScratch = new Vector3();
+  private readonly projectiles: ProjectileInstance[] = [];
   private readonly overlay: DebugOverlay;
   private readonly debugControls: DebugControls;
   private readonly world = new EntityWorld();
@@ -43,8 +59,12 @@ export class ShatterGame {
   constructor(private readonly canvas: HTMLCanvasElement, private readonly host: HTMLElement) {
     this.ctx = createRenderContext(canvas);
     this.player = new PlayerToken();
+    this.dummy = new TrainingDummy();
     this.ctx.scene.add(createArena());
+    this.ctx.scene.add(this.dummy.mesh);
     this.ctx.scene.add(this.player.mesh);
+
+    this.dummy.teleport(this.dummyPosition);
 
     this.world.addSystem(new MovementSystem());
     this.world.addSystem(new TelegraphSystem());
@@ -53,8 +73,9 @@ export class ShatterGame {
     this.playerEntity = this.world.spawn(PlayerBlueprint);
     this.playerTransform = this.playerEntity.get(TransformComponentType);
     this.playerMotion = this.playerEntity.get(MotionComponentType);
-    this.player.teleport(this.playerTransform.position);
-    this.playerPosition.copy(this.playerTransform.position);
+    this.playerTransform.position.copy(this.spawnPosition);
+    this.player.teleport(this.spawnPosition);
+    this.playerPosition.copy(this.spawnPosition);
 
     this.loop = new GameLoop(this.update);
     this.loop.setStatsListener(this.handleLoopStats);
@@ -83,6 +104,10 @@ export class ShatterGame {
     this.keyboard.dispose();
     this.debugControls.dispose();
     this.overlay.dispose();
+    this.clearProjectiles();
+    this.ctx.scene.remove(this.dummy.mesh);
+    this.projectileGeometry.dispose();
+    this.projectileMaterial.dispose();
     window.removeEventListener("resize", this.handleResize);
   }
 
@@ -126,6 +151,16 @@ export class ShatterGame {
     this.enforceArenaBounds();
     this.player.teleport(this.playerPosition);
 
+    if (input.ability1) {
+      this.marksman.tryFire({
+        playerPosition: this.playerPosition,
+        enemyPosition: this.dummyPosition,
+        spawnProjectile: this.spawnProjectile
+      });
+    }
+
+    this.updateProjectiles(deltaTime);
+
     this.ctx.renderer.render(this.ctx.scene, this.ctx.camera);
   };
 
@@ -161,9 +196,51 @@ export class ShatterGame {
   private resetPlayer() {
     this.playerMotion.velocity.set(0, 0, 0);
     this.playerMotion.targetVelocity.set(0, 0, 0);
-    this.playerTransform.position.copy(this.origin);
-    this.playerPosition.copy(this.origin);
-    this.player.teleport(this.origin);
+    this.playerTransform.position.copy(this.spawnPosition);
+    this.playerPosition.copy(this.spawnPosition);
+    this.player.teleport(this.spawnPosition);
+    this.clearProjectiles();
     this.enforceArenaBounds();
+  }
+
+  private readonly spawnProjectile = (origin: Vector3, velocity: Vector3) => {
+    const mesh = new Mesh(this.projectileGeometry, this.projectileMaterial);
+    const position = new Vector3(origin.x, 0.25, origin.z);
+    const direction = new Vector3().copy(velocity);
+    direction.y = 0;
+    mesh.position.set(position.x, position.y, position.z);
+    this.ctx.scene.add(mesh);
+    this.projectiles.push({ mesh, position, velocity: direction, lifetime: 2 });
+  };
+
+  private updateProjectiles(deltaTime: number) {
+    for (let i = this.projectiles.length - 1; i >= 0; i -= 1) {
+      const projectile = this.projectiles[i];
+      projectile.position.addScaledVector(projectile.velocity, deltaTime);
+      projectile.mesh.position.set(projectile.position.x, projectile.position.y, projectile.position.z);
+      projectile.lifetime -= deltaTime;
+      if (projectile.lifetime <= 0) {
+        this.removeProjectile(i);
+        continue;
+      }
+
+      this.projectileScratch.copy(projectile.position).sub(this.dummyPosition);
+      this.projectileScratch.y = 0;
+      if (this.projectileScratch.lengthSq() < 0.35 * 0.35) {
+        this.removeProjectile(i);
+      }
+    }
+  }
+
+  private removeProjectile(index: number) {
+    const [projectile] = this.projectiles.splice(index, 1);
+    this.ctx.scene.remove(projectile.mesh);
+  }
+
+  private clearProjectiles() {
+    for (const projectile of this.projectiles) {
+      this.ctx.scene.remove(projectile.mesh);
+    }
+    this.projectiles.length = 0;
   }
 }

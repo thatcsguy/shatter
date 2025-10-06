@@ -1,15 +1,17 @@
-﻿export type MovementInput = {
+export type MovementInput = {
   up: boolean;
   down: boolean;
   left: boolean;
   right: boolean;
+  ability1: boolean;
 };
 
 const DEFAULT_INPUT: MovementInput = {
   up: false,
   down: false,
   left: false,
-  right: false
+  right: false,
+  ability1: false
 };
 
 export class KeyboardController {
@@ -26,7 +28,9 @@ export class KeyboardController {
   }
 
   snapshot(): MovementInput {
-    return { ...this.state };
+    const snapshot = { ...this.state };
+    this.state.ability1 = false;
+    return snapshot;
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent) => {
@@ -55,6 +59,11 @@ export class KeyboardController {
       case "KeyD":
       case "ArrowRight":
         this.state.right = pressed;
+        break;
+      case "Digit1":
+        if (pressed) {
+          this.state.ability1 = true;
+        }
         break;
       default:
         break;
