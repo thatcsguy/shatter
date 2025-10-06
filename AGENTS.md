@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-Shatter is a Vite + TypeScript playground for a Three.js-driven arena. Runtime entry `src/main.ts` wires Vite hydration into the game loop in `src/app/core`. Game logic lives in `src/app/entities` (component, system, world primitives) with supporting modules in `src/app/rendering`, `src/app/input`, and opt-in overlays under `src/app/debug`. Scene configuration defaults sit in `src/config/`, styles in `src/styles/global.css`, and long-form reference material in `docs/`. Place new reusable assets in `src/assets/` and keep binary exports outside `src/app`.
+Shatter is a Vite + TypeScript playground for a Three.js-driven arena. Runtime entry `src/main.ts` wires Vite hydration into the game loop in `src/app/core`. Game logic lives in `src/app/entities` (component, system, world primitives) with supporting modules in `src/app/rendering`, `src/app/input`, and opt-in overlays under `src/app/debug`. Playable class implementations belong in `src/app/core/classes/`. Scene configuration defaults sit in `src/config/` with encounter definitions organized under `src/config/encounters/`, styles in `src/styles/global.css`, and long-form reference material in `docs/`. Place new reusable assets in `src/assets/` and keep binary exports outside `src/app`.
 
 ## Build, Test, and Development Commands
 - `npm run dev`: start Vite dev server with hot reload; pair with the debug overlay to inspect entities.
