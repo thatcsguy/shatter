@@ -16,6 +16,18 @@ interface DebugOverlayClassSelection {
   onSelect: (id: string) => void;
 }
 
+export interface DebugOverlayDamageTrackerState {
+  dps: number;
+  elapsed: number;
+  duration: number;
+  active: boolean;
+  locked: boolean;
+}
+
+export interface DebugOverlayDamageTrackerControls {
+  onReset: () => void;
+}
+
 export class DebugOverlay {
   private readonly root: HTMLDivElement;
   private readonly fpsEl: HTMLDivElement;
@@ -28,6 +40,12 @@ export class DebugOverlay {
   private classSelectionCallback: ((id: string) => void) | null = null;
   private currentClassId: string | null = null;
   private visible = false;
+  private readonly damageSection: HTMLDivElement;
+  private readonly damageDpsEl: HTMLDivElement;
+  private readonly damageTimerEl: HTMLDivElement;
+  private readonly damageResetButton: HTMLButtonElement;
+  private damageResetCallback: (() => void) | null = null;
+  private lastDamageState: DebugOverlayDamageTrackerState | null = null;
 
   constructor(private readonly host: HTMLElement) {
     this.root = document.createElement("div");
@@ -76,12 +94,56 @@ export class DebugOverlay {
     this.positionEl = this.createRow();
     this.speedEl = this.createRow();
 
+    this.damageSection = document.createElement("div");
+    this.damageSection.style.marginTop = "8px";
+    this.damageSection.style.paddingTop = "8px";
+    this.damageSection.style.borderTop = "1px solid rgba(148, 163, 184, 0.25)";
+
+    const damageTitle = document.createElement("div");
+    damageTitle.textContent = "Damage Tracker";
+    damageTitle.style.fontWeight = "600";
+    damageTitle.style.marginBottom = "4px";
+    this.damageSection.appendChild(damageTitle);
+
+    this.damageDpsEl = document.createElement("div");
+    this.damageDpsEl.textContent = "DPS: 0.0";
+    this.damageSection.appendChild(this.damageDpsEl);
+
+    this.damageTimerEl = document.createElement("div");
+    this.damageTimerEl.textContent = "Timer: 0.0 / 60.0s";
+    this.damageSection.appendChild(this.damageTimerEl);
+
+    this.damageResetButton = document.createElement("button");
+    this.damageResetButton.type = "button";
+    this.damageResetButton.textContent = "Reset";
+    this.damageResetButton.style.marginTop = "6px";
+    this.damageResetButton.style.padding = "4px 10px";
+    this.damageResetButton.style.borderRadius = "6px";
+    this.damageResetButton.style.border = "1px solid rgba(148, 163, 184, 0.35)";
+    this.damageResetButton.style.background = "rgba(30, 41, 59, 0.6)";
+    this.damageResetButton.style.color = "#f8fafc";
+    this.damageResetButton.style.fontSize = "11px";
+    this.damageResetButton.style.fontWeight = "600";
+    this.damageResetButton.style.cursor = "pointer";
+    this.damageResetButton.addEventListener("click", () => {
+      if (this.damageResetCallback) {
+        this.damageResetCallback();
+      }
+    });
+    this.damageSection.appendChild(this.damageResetButton);
+
+    this.root.appendChild(this.damageSection);
+
     this.host.appendChild(this.root);
   }
 
   setVisible(visible: boolean) {
     this.visible = visible;
     this.root.style.display = visible ? "block" : "none";
+
+    if (visible && this.lastDamageState) {
+      this.renderDamageTracker(this.lastDamageState);
+    }
   }
 
   toggle() {
@@ -147,6 +209,16 @@ export class DebugOverlay {
     this.speedEl.textContent = `Speed: ${stats.speed.toFixed(2)}`;
   }
 
+  setDamageTrackerControls(controls: DebugOverlayDamageTrackerControls) {
+    this.damageResetCallback = controls.onReset;
+  }
+
+  updateDamageTracker(state: DebugOverlayDamageTrackerState) {
+    this.lastDamageState = state;
+    if (!this.visible) return;
+    this.renderDamageTracker(state);
+  }
+
   dispose() {
     this.host.removeChild(this.root);
     this.classButtons.clear();
@@ -157,5 +229,14 @@ export class DebugOverlay {
     row.textContent = "";
     this.root.appendChild(row);
     return row;
+  }
+
+  private renderDamageTracker(state: DebugOverlayDamageTrackerState) {
+    const dpsValue = state.dps;
+    this.damageDpsEl.textContent = `DPS: ${dpsValue.toFixed(1)}`;
+    const elapsed = state.locked ? state.duration : state.elapsed;
+    this.damageTimerEl.textContent = `Timer: ${elapsed.toFixed(1)} / ${state.duration.toFixed(0)}s`;
+    this.damageResetButton.disabled = false;
+    this.damageResetButton.style.opacity = state.active ? "1" : "0.85";
   }
 }

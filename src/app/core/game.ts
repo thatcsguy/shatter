@@ -25,6 +25,9 @@ import { Marksman } from "@app/core/classes/marksman";
 import type { PlayerClass, PlayerClassContext, ProjectileSpawnOptions } from "@app/core/classes/playerClass";
 import { AbilityHud } from "@app/core/abilityHud";
 import type { AbilityHudState } from "@app/core/abilityHud";
+import { DamageEngine, type DamageInstance, type DamageResult, type DamageSourceParams } from "@app/core/damage";
+import { DamageTracker } from "@app/core/damageTracker";
+import { DamageNumberManager } from "@app/rendering/damageNumbers";
 
 interface ProjectileInstance {
   mesh: Mesh;
@@ -32,6 +35,7 @@ interface ProjectileInstance {
   velocity: Vector3;
   lifetime: number;
   material?: MeshBasicMaterial;
+  damage?: DamageInstance;
 }
 
 type ClassId = "marksman" | "blackMage";
@@ -78,6 +82,9 @@ export class ShatterGame {
   private playerClass: PlayerClass;
   private classContext!: PlayerClassContext;
   private statsListener: GameStatsListener | null = null;
+  private readonly damageEngine = new DamageEngine();
+  private readonly damageTracker = new DamageTracker();
+  private readonly damageNumbers: DamageNumberManager;
 
   constructor(private readonly canvas: HTMLCanvasElement, private readonly host: HTMLElement) {
     this.ctx = createRenderContext(canvas);
@@ -87,6 +94,8 @@ export class ShatterGame {
     this.ctx.scene.add(createArena());
     this.ctx.scene.add(this.boss.mesh);
     this.ctx.scene.add(this.player.mesh);
+
+    this.damageNumbers = new DamageNumberManager(this.host, this.ctx.camera, this.ctx.viewport);
 
     this.bossPosition.copy(bossConfig.initialPosition);
     this.boss.teleport(this.bossPosition);
@@ -108,7 +117,9 @@ export class ShatterGame {
       enemyPosition: this.bossPosition,
       isPlayerMoving: false,
       spawnProjectile: this.spawnProjectile,
-      setCastProgress: (progress) => this.player.setCastProgress(progress)
+      setCastProgress: (progress) => this.player.setCastProgress(progress),
+      createDamageInstance: this.createDamageInstance,
+      dealDamage: this.dealDamageToBoss
     };
 
     this.loop = new GameLoop(this.update);
@@ -122,6 +133,11 @@ export class ShatterGame {
       current: this.currentClassId,
       onSelect: this.handleClassSelected
     });
+
+    this.overlay.setDamageTrackerControls({
+      onReset: this.resetDamageTracking
+    });
+    this.overlay.updateDamageTracker(this.damageTracker.getState());
 
     this.debugControls = new DebugControls({
       toggleOverlay: () => this.overlay.toggle(),
@@ -149,6 +165,7 @@ export class ShatterGame {
     this.abilityHud.dispose();
     this.player.setCastProgress(null);
     this.clearProjectiles();
+    this.damageNumbers.dispose();
     this.ctx.scene.remove(this.boss.mesh);
     this.projectileGeometry.dispose();
     this.projectileMaterial.dispose();
@@ -209,6 +226,10 @@ export class ShatterGame {
     this.abilityHud.update(this.getAbilityHudState());
 
     this.updateProjectiles(deltaTime);
+
+    this.damageTracker.update(deltaTime);
+    this.overlay.updateDamageTracker(this.damageTracker.getState());
+    this.damageNumbers.update(deltaTime);
 
     this.ctx.renderer.render(this.ctx.scene, this.ctx.camera);
   };
@@ -272,7 +293,14 @@ export class ShatterGame {
     mesh.position.set(position.x, position.y, position.z);
     mesh.scale.setScalar(options?.scale ?? 1);
     this.ctx.scene.add(mesh);
-    this.projectiles.push({ mesh, position, velocity: direction, lifetime: 2, material: options?.color ? material : undefined });
+    this.projectiles.push({
+      mesh,
+      position,
+      velocity: direction,
+      lifetime: 2,
+      material: options?.color ? material : undefined,
+      damage: options?.damage
+    });
   };
 
   private getAbilityHudState(): AbilityHudState {
@@ -296,6 +324,9 @@ export class ShatterGame {
       this.projectileScratch.copy(projectile.position).sub(this.bossPosition);
       this.projectileScratch.y = 0;
       if (this.projectileScratch.lengthSq() < 0.35 * 0.35) {
+        if (projectile.damage) {
+          this.dealDamageToBoss(projectile.damage);
+        }
         this.removeProjectile(i);
       }
     }
@@ -332,4 +363,24 @@ export class ShatterGame {
     }
     this.projectiles.length = 0;
   }
+
+  private readonly createDamageInstance = (params: DamageSourceParams) => {
+    return this.damageEngine.createInstance(params);
+  };
+
+  private readonly dealDamageToBoss = (instance: DamageInstance): DamageResult => {
+    const alreadyResolved = instance.resolved;
+    const result = this.damageEngine.resolve(instance);
+    if (!alreadyResolved) {
+      this.damageTracker.record(result.amount);
+      this.damageNumbers.spawn(result.amount, this.bossPosition);
+    }
+    return result;
+  };
+
+  private readonly resetDamageTracking = () => {
+    this.damageTracker.reset();
+    this.overlay.updateDamageTracker(this.damageTracker.getState());
+    this.damageNumbers.clear();
+  };
 }

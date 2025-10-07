@@ -3,12 +3,14 @@ import type { AbilityStatus } from "@app/core/abilityHud";
 import type { ClassAbilityDefinition, ClassAbilityState } from "@app/core/classes/abilities";
 import { createPlaceholderAbilityDefinition } from "@app/core/classes/placeholderAbility";
 import type { PlayerClass, PlayerClassContext } from "@app/core/classes/playerClass";
+import type { DamageTag } from "@app/core/damage";
 
 const DARK_BOLT_CAST_TIME = 2;
 const DARK_BOLT_INSTANT_COOLDOWN = 2;
 const FLOW_STATE_COOLDOWN = 10;
 const MAX_FLOW_STATE_CHARGES = 3;
 const DARK_BOLT_PROJECTILE_SPEED = 12;
+const DARK_BOLT_BASE_DAMAGE = 30;
 
 export class BlackMage implements PlayerClass {
   private readonly direction = new Vector3();
@@ -142,10 +144,12 @@ export class BlackMage implements PlayerClass {
   }
 
   private createDarkBoltDefinition(): ClassAbilityDefinition {
+    const abilityId = "black-mage-dark-bolt";
     return {
-      id: "black-mage-dark-bolt",
+      id: abilityId,
       hotkey: 1,
       cooldown: DARK_BOLT_INSTANT_COOLDOWN,
+      baseDamage: DARK_BOLT_BASE_DAMAGE,
       execute: (context: PlayerClassContext) => {
         this.direction.copy(context.enemyPosition).sub(context.playerPosition);
         if (this.direction.lengthSq() === 0) {
@@ -156,7 +160,13 @@ export class BlackMage implements PlayerClass {
         this.origin.copy(context.playerPosition).addScaledVector(this.direction, 0.6);
 
         const velocity = this.direction.clone().multiplyScalar(DARK_BOLT_PROJECTILE_SPEED);
-        context.spawnProjectile(this.origin, velocity, { color: 0x111827 });
+        const tags: DamageTag[] = ["projectile", "magic"];
+        const damage = context.createDamageInstance({
+          abilityId,
+          baseDamage: DARK_BOLT_BASE_DAMAGE,
+          tags
+        });
+        context.spawnProjectile(this.origin, velocity, { color: 0x111827, damage });
       }
     };
   }
