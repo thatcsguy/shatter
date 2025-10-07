@@ -1,53 +1,21 @@
 import { Vector3 } from "three";
-
-export interface ProjectileSpawnOptions {
-  scale?: number;
-}
-
-export interface MarksmanContext {
-  playerPosition: Vector3;
-  enemyPosition: Vector3;
-  spawnProjectile: (origin: Vector3, velocity: Vector3, options?: ProjectileSpawnOptions) => void;
-}
+import type { AbilityStatus } from "@app/core/abilityHud";
+import type {
+  AbilityExecutionContext,
+  ClassAbilityDefinition,
+  ClassAbilityState
+} from "@app/core/classes/abilities";
+import type { PlayerClass, PlayerClassContext } from "@app/core/classes/playerClass";
 
 export interface MarksmanOptions {
   projectileSpeed?: number;
 }
 
-interface AbilityExecutionContext {
-  empowered: boolean;
-}
-
-interface AbilityDefinition {
-  id: string;
-  hotkey: number;
-  cooldown: number;
-  execute: (context: MarksmanContext, abilityContext: AbilityExecutionContext) => void;
-}
-
-interface AbilityState {
-  definition: AbilityDefinition;
-  remainingCooldown: number;
-}
-
-export interface MarksmanAbilityStatus {
-  id: string;
-  slot: number;
-  hotkey: number;
-  cooldown: number;
-  remainingCooldown: number;
-}
-
-export interface MarksmanGaugeStatus {
-  current: number;
-  max: number;
-}
-
-export class Marksman {
+export class Marksman implements PlayerClass {
   private readonly projectileSpeed: number;
   private readonly direction = new Vector3();
   private readonly origin = new Vector3();
-  private readonly abilities: AbilityState[];
+  private readonly abilities: ClassAbilityState[];
   private readonly maxGauge = 100;
   private readonly gaugeGainPerUse = 10;
   private gauge = 0;
@@ -55,19 +23,12 @@ export class Marksman {
   constructor(options?: MarksmanOptions) {
     this.projectileSpeed = options?.projectileSpeed ?? 14;
     this.abilities = Array.from({ length: 4 }, (_, index) => ({
-      definition: {
-        id: `marksman-shot-${index + 1}`,
-        hotkey: index + 1,
-        cooldown: 4,
-        execute: (context: MarksmanContext, abilityContext: AbilityExecutionContext) => {
-          this.fire(context, abilityContext.empowered);
-        }
-      },
+      definition: this.createAbilityDefinition(index),
       remainingCooldown: 0
     }));
   }
 
-  update(deltaTime: number) {
+  update(deltaTime: number, _context: PlayerClassContext) {
     for (const ability of this.abilities) {
       if (ability.remainingCooldown > 0) {
         ability.remainingCooldown = Math.max(ability.remainingCooldown - deltaTime, 0);
@@ -75,7 +36,7 @@ export class Marksman {
     }
   }
 
-  tryUseAbility(slot: number, context: MarksmanContext): boolean {
+  tryUseAbility(slot: number, context: PlayerClassContext): boolean {
     const ability = this.abilities[slot];
     if (!ability || ability.remainingCooldown > 0) {
       return false;
@@ -95,7 +56,7 @@ export class Marksman {
     return true;
   }
 
-  getAbilityStatuses(): MarksmanAbilityStatus[] {
+  getAbilityStatuses(): AbilityStatus[] {
     return this.abilities.map((ability, index) => ({
       id: ability.definition.id,
       slot: index,
@@ -105,11 +66,22 @@ export class Marksman {
     }));
   }
 
-  getGaugeStatus(): MarksmanGaugeStatus {
-    return { current: this.gauge, max: this.maxGauge };
+  getGaugeState() {
+    return { type: "bar" as const, current: this.gauge, max: this.maxGauge };
   }
 
-  private fire(context: MarksmanContext, empowered: boolean) {
+  private createAbilityDefinition(slot: number): ClassAbilityDefinition {
+    return {
+      id: `marksman-shot-${slot + 1}`,
+      hotkey: slot + 1,
+      cooldown: 4,
+      execute: (context: PlayerClassContext, abilityContext?: AbilityExecutionContext) => {
+        this.fire(context, abilityContext?.empowered ?? false);
+      }
+    };
+  }
+
+  private fire(context: PlayerClassContext, empowered: boolean) {
     this.direction.copy(context.enemyPosition).sub(context.playerPosition);
     if (this.direction.lengthSq() === 0) {
       return;

@@ -1,8 +1,18 @@
-﻿import { CircleGeometry, Group, Mesh, MeshBasicMaterial, Vector3 } from "three";
+import {
+  CircleGeometry,
+  DoubleSide,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  RingGeometry,
+  Vector3
+} from "three";
 
 export class PlayerToken {
   readonly mesh: Group;
   private readonly position = new Vector3();
+  private readonly castProgressMesh: Mesh;
+  private currentCastProgress: number | null = null;
 
   constructor() {
     this.mesh = new Group();
@@ -13,6 +23,16 @@ export class PlayerToken {
     );
     body.rotation.x = -Math.PI / 2;
     this.mesh.add(body);
+
+    this.castProgressMesh = new Mesh(
+      new RingGeometry(0.58, 0.74, 64, 1, -Math.PI / 2, 0.001),
+      new MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.55, side: DoubleSide })
+    );
+    this.castProgressMesh.rotation.x = -Math.PI / 2;
+    this.castProgressMesh.position.y = 0.03;
+    this.castProgressMesh.visible = false;
+    this.castProgressMesh.renderOrder = 1;
+    this.mesh.add(this.castProgressMesh);
 
     this.mesh.position.set(0, 0.02, 0);
   }
@@ -29,6 +49,27 @@ export class PlayerToken {
 
   getPosition(out: Vector3): Vector3 {
     return out.copy(this.position);
+  }
+
+  setCastProgress(progress: number | null) {
+    if (progress === null) {
+      this.currentCastProgress = null;
+      this.castProgressMesh.visible = false;
+      return;
+    }
+
+    const clamped = Math.min(Math.max(progress, 0), 1);
+
+    if (this.currentCastProgress === clamped && this.castProgressMesh.visible) {
+      return;
+    }
+
+    this.currentCastProgress = clamped;
+    this.castProgressMesh.visible = true;
+
+    const newGeometry = new RingGeometry(0.58, 0.74, 64, 1, -Math.PI / 2, Math.max(clamped, 0.001) * Math.PI * 2);
+    this.castProgressMesh.geometry.dispose();
+    this.castProgressMesh.geometry = newGeometry;
   }
 
   private syncMeshPosition() {
