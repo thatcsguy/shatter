@@ -6,6 +6,10 @@ import type {
   ClassAbilityState
 } from "@app/core/classes/abilities";
 import type { PlayerClass, PlayerClassContext } from "@app/core/classes/playerClass";
+import type { DamageTag } from "@app/core/damage";
+
+const MARKSMAN_BASE_DAMAGE = 10;
+const MARKSMAN_EMPOWERED_DAMAGE = 50;
 
 export interface MarksmanOptions {
   projectileSpeed?: number;
@@ -28,7 +32,8 @@ export class Marksman implements PlayerClass {
     }));
   }
 
-  update(deltaTime: number, _context: PlayerClassContext) {
+  update(deltaTime: number, context: PlayerClassContext) {
+    void context;
     for (const ability of this.abilities) {
       if (ability.remainingCooldown > 0) {
         ability.remainingCooldown = Math.max(ability.remainingCooldown - deltaTime, 0);
@@ -71,17 +76,19 @@ export class Marksman implements PlayerClass {
   }
 
   private createAbilityDefinition(slot: number): ClassAbilityDefinition {
+    const abilityId = `marksman-shot-${slot + 1}`;
     return {
-      id: `marksman-shot-${slot + 1}`,
+      id: abilityId,
       hotkey: slot + 1,
       cooldown: 4,
+      baseDamage: MARKSMAN_BASE_DAMAGE,
       execute: (context: PlayerClassContext, abilityContext?: AbilityExecutionContext) => {
-        this.fire(context, abilityContext?.empowered ?? false);
+        this.fire(context, abilityContext?.empowered ?? false, abilityId);
       }
     };
   }
 
-  private fire(context: PlayerClassContext, empowered: boolean) {
+  private fire(context: PlayerClassContext, empowered: boolean, abilityId: string) {
     this.direction.copy(context.enemyPosition).sub(context.playerPosition);
     if (this.direction.lengthSq() === 0) {
       return;
@@ -91,6 +98,12 @@ export class Marksman implements PlayerClass {
     this.origin.copy(context.playerPosition).addScaledVector(this.direction, 0.6);
 
     const velocity = this.direction.clone().multiplyScalar(this.projectileSpeed);
-    context.spawnProjectile(this.origin, velocity, { scale: empowered ? 3 : 1 });
+    const tags: DamageTag[] = empowered ? ["projectile", "empowered"] : ["projectile"];
+    const baseDamage = empowered ? MARKSMAN_EMPOWERED_DAMAGE : MARKSMAN_BASE_DAMAGE;
+    const damage = context.createDamageInstance({ abilityId, baseDamage, tags });
+    context.spawnProjectile(this.origin, velocity, {
+      scale: empowered ? 3 : 1,
+      damage
+    });
   }
 }
