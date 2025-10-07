@@ -8,6 +8,9 @@ import {
   Vector3
 } from "three";
 
+const CAST_PROGRESS_TOP_ANGLE = Math.PI / 2;
+const MIN_CAST_PROGRESS = 0.001;
+
 export class PlayerToken {
   readonly mesh: Group;
   private readonly position = new Vector3();
@@ -25,7 +28,7 @@ export class PlayerToken {
     this.mesh.add(body);
 
     this.castProgressMesh = new Mesh(
-      new RingGeometry(0.58, 0.74, 64, 1, -Math.PI / 2, 0.001),
+      new RingGeometry(0.58, 0.74, 64, 1, CAST_PROGRESS_TOP_ANGLE - MIN_CAST_PROGRESS, MIN_CAST_PROGRESS),
       new MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.55, side: DoubleSide })
     );
     this.castProgressMesh.rotation.x = -Math.PI / 2;
@@ -67,7 +70,9 @@ export class PlayerToken {
     this.currentCastProgress = clamped;
     this.castProgressMesh.visible = true;
 
-    const newGeometry = new RingGeometry(0.58, 0.74, 64, 1, -Math.PI / 2, Math.max(clamped, 0.001) * Math.PI * 2);
+    const thetaLength = Math.max(clamped, MIN_CAST_PROGRESS) * Math.PI * 2;
+    const thetaStart = CAST_PROGRESS_TOP_ANGLE - thetaLength;
+    const newGeometry = new RingGeometry(0.58, 0.74, 64, 1, thetaStart, thetaLength);
     this.castProgressMesh.geometry.dispose();
     this.castProgressMesh.geometry = newGeometry;
   }

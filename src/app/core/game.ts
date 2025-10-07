@@ -36,6 +36,9 @@ interface ProjectileInstance {
 
 type ClassId = "marksman" | "blackMage";
 
+// Allow a small amount of residual velocity while still counting the player as idle for casting.
+const PLAYER_MOVEMENT_IDLE_THRESHOLD_SQ = 0.1 * 0.1;
+
 const CLASS_OPTIONS: { id: ClassId; label: string }[] = [
   { id: "marksman", label: "Marksman" },
   { id: "blackMage", label: "Black Mage" }
@@ -192,7 +195,8 @@ export class ShatterGame {
     this.enforceArenaBounds();
     this.player.teleport(this.playerPosition);
 
-    this.classContext.isPlayerMoving = this.playerMotion.velocity.lengthSq() > 0.0001;
+    this.classContext.isPlayerMoving =
+      this.playerMotion.velocity.lengthSq() > PLAYER_MOVEMENT_IDLE_THRESHOLD_SQ;
     this.playerClass.update(deltaTime, this.classContext);
 
     const abilityInputs = [input.ability1, input.ability2, input.ability3, input.ability4];
