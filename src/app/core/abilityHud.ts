@@ -11,6 +11,11 @@ export type ClassGaugeState =
       type: "bar";
       current: number;
       max: number;
+    }
+  | {
+      type: "charges";
+      current: number;
+      max: number;
     };
 
 export interface AbilityHudState {
@@ -29,6 +34,8 @@ export class AbilityHud {
   private readonly gaugeContainer: HTMLDivElement;
   private readonly gaugeTrack: HTMLDivElement;
   private readonly gaugeFill: HTMLDivElement;
+  private readonly gaugeCharges: HTMLDivElement;
+  private readonly gaugeChargeItems: HTMLDivElement[] = [];
   private readonly container: HTMLDivElement;
   private readonly slots = new Map<number, AbilitySlotElements>();
 
@@ -46,6 +53,10 @@ export class AbilityHud {
     this.gaugeFill.className = "class-gauge__fill";
     this.gaugeTrack.appendChild(this.gaugeFill);
     this.gaugeContainer.appendChild(this.gaugeTrack);
+
+    this.gaugeCharges = document.createElement("div");
+    this.gaugeCharges.className = "class-gauge__charges";
+    this.gaugeContainer.appendChild(this.gaugeCharges);
 
     this.root.appendChild(this.gaugeContainer);
 
@@ -113,6 +124,7 @@ export class AbilityHud {
     if (!gauge) {
       this.gaugeContainer.style.visibility = "hidden";
       this.gaugeFill.style.width = "0%";
+      this.gaugeCharges.style.display = "none";
       return;
     }
 
@@ -122,10 +134,43 @@ export class AbilityHud {
       const ratio = gauge.max === 0 ? 0 : Math.min(Math.max(gauge.current / gauge.max, 0), 1);
       this.gaugeTrack.style.display = "block";
       this.gaugeFill.style.width = `${ratio * 100}%`;
+      this.gaugeCharges.style.display = "none";
+      return;
+    }
+
+    if (gauge.type === "charges") {
+      this.gaugeTrack.style.display = "none";
+      this.gaugeFill.style.width = "0%";
+      this.updateGaugeCharges(gauge.max, gauge.current);
       return;
     }
 
     this.gaugeTrack.style.display = "none";
     this.gaugeFill.style.width = "0%";
+    this.gaugeCharges.style.display = "none";
+  }
+
+  private updateGaugeCharges(max: number, current: number) {
+    this.gaugeCharges.style.display = "flex";
+
+    if (this.gaugeChargeItems.length !== max) {
+      this.gaugeCharges.replaceChildren();
+      this.gaugeChargeItems.length = 0;
+
+      for (let i = 0; i < max; i += 1) {
+        const charge = document.createElement("div");
+        charge.className = "class-gauge__charge";
+        this.gaugeCharges.appendChild(charge);
+        this.gaugeChargeItems.push(charge);
+      }
+    }
+
+    this.gaugeChargeItems.forEach((charge, index) => {
+      if (index < current) {
+        charge.classList.add("class-gauge__charge--active");
+      } else {
+        charge.classList.remove("class-gauge__charge--active");
+      }
+    });
   }
 }

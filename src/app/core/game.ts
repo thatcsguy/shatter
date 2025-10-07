@@ -20,8 +20,9 @@ import { MovementSystem } from "@app/entities/systems/movementSystem";
 import { TelegraphSystem } from "@app/entities/systems/telegraphSystem";
 import { CollisionSystem } from "@app/entities/systems/collisionSystem";
 import { PlayerBlueprint } from "@app/entities/examples/entityShowcase";
+import { BlackMage } from "@app/core/classes/blackMage";
 import { Marksman } from "@app/core/classes/marksman";
-import type { MarksmanGaugeStatus, ProjectileSpawnOptions } from "@app/core/classes/marksman";
+import type { PlayerClass, PlayerClassContext, ProjectileSpawnOptions } from "@app/core/classes/playerClass";
 import { AbilityHud } from "@app/core/abilityHud";
 import type { AbilityHudState } from "@app/core/abilityHud";
 
@@ -30,7 +31,18 @@ interface ProjectileInstance {
   position: Vector3;
   velocity: Vector3;
   lifetime: number;
+  material?: MeshBasicMaterial;
 }
+
+type ClassId = "marksman" | "blackMage";
+
+// Allow a small amount of residual velocity while still counting the player as idle for casting.
+const PLAYER_MOVEMENT_IDLE_THRESHOLD_SQ = 0.1 * 0.1;
+
+const CLASS_OPTIONS: { id: ClassId; label: string }[] = [
+  { id: "marksman", label: "Marksman" },
+  { id: "blackMage", label: "Black Mage" }
+];
 
 export interface GameStatsListener {
   (stats: { fps: number; rawDelta: number }): void;
@@ -43,7 +55,10 @@ export class ShatterGame {
   private readonly encounter = DEFAULT_ENCOUNTER;
   private readonly player: PlayerToken;
   private readonly boss = this.encounter.boss.create();
-  private readonly marksman = new Marksman();
+  private readonly classFactories: Record<ClassId, () => PlayerClass> = {
+    marksman: () => new Marksman(),
+    blackMage: () => new BlackMage()
+  };
   private readonly direction = new Vector3();
   private readonly playerPosition = new Vector3();
   private readonly spawnPosition = new Vector3(-5, 0, 0);
@@ -59,6 +74,9 @@ export class ShatterGame {
   private readonly playerEntity: Entity;
   private readonly playerTransform: TransformComponent;
   private readonly playerMotion: MotionComponent;
+  private currentClassId: ClassId = "marksman";
+  private playerClass: PlayerClass;
+  private classContext!: PlayerClassContext;
   private statsListener: GameStatsListener | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement, private readonly host: HTMLElement) {
@@ -84,11 +102,26 @@ export class ShatterGame {
     this.player.teleport(this.spawnPosition);
     this.playerPosition.copy(this.spawnPosition);
 
+    this.playerClass = this.createClass(this.currentClassId);
+    this.classContext = {
+      playerPosition: this.playerPosition,
+      enemyPosition: this.bossPosition,
+      isPlayerMoving: false,
+      spawnProjectile: this.spawnProjectile,
+      setCastProgress: (progress) => this.player.setCastProgress(progress)
+    };
+
     this.loop = new GameLoop(this.update);
     this.loop.setStatsListener(this.handleLoopStats);
 
     this.overlay = new DebugOverlay(host);
     this.overlay.setVisible(false);
+
+    this.overlay.setClassOptions({
+      options: CLASS_OPTIONS,
+      current: this.currentClassId,
+      onSelect: this.handleClassSelected
+    });
 
     this.debugControls = new DebugControls({
       toggleOverlay: () => this.overlay.toggle(),
@@ -114,6 +147,7 @@ export class ShatterGame {
     this.debugControls.dispose();
     this.overlay.dispose();
     this.abilityHud.dispose();
+    this.player.setCastProgress(null);
     this.clearProjectiles();
     this.ctx.scene.remove(this.boss.mesh);
     this.projectileGeometry.dispose();
@@ -157,21 +191,19 @@ export class ShatterGame {
 
     this.world.update(deltaTime);
 
-    this.marksman.update(deltaTime);
-
     this.playerPosition.copy(this.playerTransform.position);
     this.enforceArenaBounds();
     this.player.teleport(this.playerPosition);
+
+    this.classContext.isPlayerMoving =
+      this.playerMotion.velocity.lengthSq() > PLAYER_MOVEMENT_IDLE_THRESHOLD_SQ;
+    this.playerClass.update(deltaTime, this.classContext);
 
     const abilityInputs = [input.ability1, input.ability2, input.ability3, input.ability4];
     abilityInputs.forEach((pressed, index) => {
       if (!pressed) return;
 
-      this.marksman.tryUseAbility(index, {
-        playerPosition: this.playerPosition,
-        enemyPosition: this.bossPosition,
-        spawnProjectile: this.spawnProjectile
-      });
+      this.playerClass.tryUseAbility(index, this.classContext);
     });
 
     this.abilityHud.update(this.getAbilityHudState());
@@ -216,6 +248,11 @@ export class ShatterGame {
     this.playerTransform.position.copy(this.spawnPosition);
     this.playerPosition.copy(this.spawnPosition);
     this.player.teleport(this.spawnPosition);
+    const previousMovement = this.classContext.isPlayerMoving;
+    this.classContext.isPlayerMoving = true;
+    this.playerClass.update(0, this.classContext);
+    this.classContext.isPlayerMoving = previousMovement;
+    this.player.setCastProgress(null);
     this.clearProjectiles();
     this.enforceArenaBounds();
   }
@@ -225,29 +262,23 @@ export class ShatterGame {
     velocity: Vector3,
     options?: ProjectileSpawnOptions
   ) => {
-    const mesh = new Mesh(this.projectileGeometry, this.projectileMaterial);
+    const material = options?.color
+      ? new MeshBasicMaterial({ color: options.color })
+      : this.projectileMaterial;
+    const mesh = new Mesh(this.projectileGeometry, material);
     const position = new Vector3(origin.x, 0.25, origin.z);
     const direction = new Vector3().copy(velocity);
     direction.y = 0;
     mesh.position.set(position.x, position.y, position.z);
     mesh.scale.setScalar(options?.scale ?? 1);
     this.ctx.scene.add(mesh);
-    this.projectiles.push({ mesh, position, velocity: direction, lifetime: 2 });
+    this.projectiles.push({ mesh, position, velocity: direction, lifetime: 2, material: options?.color ? material : undefined });
   };
 
   private getAbilityHudState(): AbilityHudState {
-    const gauge = this.marksman.getGaugeStatus();
     return {
-      abilities: this.marksman.getAbilityStatuses(),
-      gauge: this.mapGaugeStatus(gauge)
-    };
-  }
-
-  private mapGaugeStatus(gauge: MarksmanGaugeStatus): AbilityHudState["gauge"] {
-    return {
-      type: "bar",
-      current: gauge.current,
-      max: gauge.max
+      abilities: this.playerClass.getAbilityStatuses(),
+      gauge: this.playerClass.getGaugeState()
     };
   }
 
@@ -270,14 +301,34 @@ export class ShatterGame {
     }
   }
 
+  private createClass(id: ClassId): PlayerClass {
+    const factory = this.classFactories[id];
+    return factory();
+  }
+
+  private readonly handleClassSelected = (id: ClassId) => {
+    if (this.currentClassId === id) {
+      return;
+    }
+
+    this.currentClassId = id;
+    this.playerClass = this.createClass(id);
+    this.classContext.isPlayerMoving = false;
+    this.player.setCastProgress(null);
+    this.overlay.setCurrentClass(id);
+    this.abilityHud.update(this.getAbilityHudState());
+  };
+
   private removeProjectile(index: number) {
     const [projectile] = this.projectiles.splice(index, 1);
     this.ctx.scene.remove(projectile.mesh);
+    projectile.material?.dispose();
   }
 
   private clearProjectiles() {
     for (const projectile of this.projectiles) {
       this.ctx.scene.remove(projectile.mesh);
+      projectile.material?.dispose();
     }
     this.projectiles.length = 0;
   }
