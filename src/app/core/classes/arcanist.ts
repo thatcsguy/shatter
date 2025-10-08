@@ -1,10 +1,10 @@
 import { Vector3 } from "three";
 import type { AbilityStatus, ClassGaugeState } from "@app/core/abilityHud";
 import type {
+  AbilityExecutionContext,
   ClassAbilityDefinition,
   ClassAbilityState
 } from "@app/core/classes/abilities";
-import { createPlaceholderAbilityDefinition } from "@app/core/classes/placeholderAbility";
 import type { PlayerClass, PlayerClassContext } from "@app/core/classes/playerClass";
 import type { DamageInstance, DamageResult, DamageSourceParams, DamageTag } from "@app/core/damage";
 
@@ -18,6 +18,10 @@ const ARCANE_BLAST_BASE_DAMAGE = 10;
 const ARCANE_BLAST_BASE_COST = 15;
 const ARCANE_BLAST_ID = "arcanist-arcane-blast";
 
+const ARCANE_BARRAGE_BASE_DAMAGE = 10;
+const ARCANE_BARRAGE_BASE_COST = 10;
+const ARCANE_BARRAGE_ID = "arcanist-arcane-barrage";
+
 const ARCANE_MISSILE_COUNT = 3;
 const ARCANE_MISSILE_BASE_DAMAGE = 5;
 const ARCANE_MISSILE_MANA_GAIN = 10;
@@ -28,12 +32,17 @@ const EVOCATION_CAST_TIME = 5;
 const EVOCATION_COOLDOWN = 20;
 const EVOCATION_ID = "arcanist-evocation";
 
+interface CastSnapshot {
+  damageMultiplier?: number;
+}
+
 interface PendingCast {
   abilityIndex: number;
   castTime: number;
   elapsed: number;
   manaCost: number;
-  onComplete: (context: PlayerClassContext) => void;
+  snapshot: CastSnapshot;
+  onComplete: (context: PlayerClassContext, snapshot: CastSnapshot) => void;
 }
 
 export class Arcanist implements PlayerClass {
@@ -44,18 +53,16 @@ export class Arcanist implements PlayerClass {
   private readonly maxMana = MAX_MANA;
   private mana = MAX_MANA;
   private hungerStacks = 0;
+  private hasClearcasting = false;
 
   private activeCast: PendingCast | null = null;
 
   constructor() {
     this.abilities = [
       { definition: this.createArcaneBlastDefinition(), remainingCooldown: 0 },
+      { definition: this.createArcaneBarrageDefinition(), remainingCooldown: 0 },
       { definition: this.createArcaneMissilesDefinition(), remainingCooldown: 0 },
-      { definition: this.createEvocationDefinition(), remainingCooldown: 0 },
-      {
-        definition: createPlaceholderAbilityDefinition("arcanist-placeholder-4", 4),
-        remainingCooldown: 0
-      }
+      { definition: this.createEvocationDefinition(), remainingCooldown: 0 }
     ];
   }
 
@@ -95,10 +102,14 @@ export class Arcanist implements PlayerClass {
     }
 
     if (slot === 1) {
-      return this.tryUseArcaneMissiles(ability, context);
+      return this.tryUseArcaneBarrage(ability, context);
     }
 
     if (slot === 2) {
+      return this.tryUseArcaneMissiles(ability, context);
+    }
+
+    if (slot === 3) {
       return this.tryStartEvocation(ability, context);
     }
 
@@ -117,7 +128,8 @@ export class Arcanist implements PlayerClass {
       slot: index,
       hotkey: ability.definition.hotkey,
       cooldown: ability.definition.cooldown,
-      remainingCooldown: ability.remainingCooldown
+      remainingCooldown: ability.remainingCooldown,
+      highlighted: ability.definition.id === ARCANE_MISSILES_ID && this.hasClearcasting
     }));
   }
 
@@ -141,17 +153,42 @@ export class Arcanist implements PlayerClass {
       return false;
     }
 
-    this.beginCast(0, ARCANE_BLAST_CAST_TIME, manaCost, context, this.completeArcaneBlast);
+    const castTime = this.getArcaneBlastCastTime();
+    const snapshot: CastSnapshot = { damageMultiplier: this.getDamageMultiplierSnapshot() };
+    this.beginCast(0, castTime, manaCost, context, this.completeArcaneBlast, snapshot);
     return true;
   }
 
-  private tryUseArcaneMissiles(ability: ClassAbilityState, context: PlayerClassContext): boolean {
+  private tryUseArcaneBarrage(ability: ClassAbilityState, context: PlayerClassContext): boolean {
     if (ability.remainingCooldown > 0 || this.activeCast) {
       return false;
     }
 
-    ability.definition.execute(context);
+    const manaCost = this.getManaCost(ARCANE_BARRAGE_BASE_COST);
+    if (this.mana < manaCost) {
+      return false;
+    }
+
+    const stacksConsumed = this.hungerStacks;
+    const damageMultiplier = this.getDamageMultiplierSnapshot() * (1 + stacksConsumed);
+
+    this.spendMana(manaCost);
+    this.clearHungerStacks();
+
+    ability.definition.execute(context, { damageMultiplier });
     ability.remainingCooldown = ability.definition.cooldown;
+    return true;
+  }
+
+  private tryUseArcaneMissiles(ability: ClassAbilityState, context: PlayerClassContext): boolean {
+    if (!this.hasClearcasting || ability.remainingCooldown > 0 || this.activeCast) {
+      return false;
+    }
+
+    const damageMultiplier = this.getDamageMultiplierSnapshot();
+    ability.definition.execute(context, { damageMultiplier });
+    ability.remainingCooldown = ability.definition.cooldown;
+    this.hasClearcasting = false;
     return true;
   }
 
@@ -160,7 +197,7 @@ export class Arcanist implements PlayerClass {
       return false;
     }
 
-    this.beginCast(2, EVOCATION_CAST_TIME, 0, context, this.completeEvocation);
+    this.beginCast(3, EVOCATION_CAST_TIME, 0, context, this.completeEvocation);
     return true;
   }
 
@@ -169,13 +206,15 @@ export class Arcanist implements PlayerClass {
     castTime: number,
     manaCost: number,
     context: PlayerClassContext,
-    onComplete: (ctx: PlayerClassContext) => void
+    onComplete: (ctx: PlayerClassContext, snapshot: CastSnapshot) => void,
+    snapshot: CastSnapshot = {}
   ) {
     this.activeCast = {
       abilityIndex,
       castTime,
       elapsed: 0,
       manaCost,
+      snapshot,
       onComplete
     };
     context.setCastProgress(0);
@@ -194,7 +233,7 @@ export class Arcanist implements PlayerClass {
       this.spendMana(cast.manaCost);
     }
 
-    cast.onComplete(context);
+    cast.onComplete(context, cast.snapshot);
 
     const ability = this.abilities[cast.abilityIndex];
     if (ability && ability.definition.cooldown > 0) {
@@ -207,18 +246,28 @@ export class Arcanist implements PlayerClass {
     context.setCastProgress(null);
   }
 
-  private completeArcaneBlast = (context: PlayerClassContext) => {
-    const damage = this.createScaledDamageInstance(context, {
-      abilityId: ARCANE_BLAST_ID,
-      baseDamage: ARCANE_BLAST_BASE_DAMAGE,
-      tags: this.getMagicTags()
-    });
+  private completeArcaneBlast = (context: PlayerClassContext, snapshot: CastSnapshot) => {
+    const damageMultiplier = snapshot.damageMultiplier ?? this.getDamageMultiplierSnapshot();
+    const damage = this.createScaledDamageInstance(
+      context,
+      {
+        abilityId: ARCANE_BLAST_ID,
+        baseDamage: ARCANE_BLAST_BASE_DAMAGE,
+        tags: this.getMagicTags()
+      },
+      damageMultiplier
+    );
     context.dealDamage(damage);
     this.addHungerStack();
+
+    if (Math.random() < 0.1) {
+      this.hasClearcasting = true;
+    }
   };
 
-  private completeEvocation = (context: PlayerClassContext) => {
+  private completeEvocation = (context: PlayerClassContext, _snapshot: CastSnapshot) => {
     void context;
+    void _snapshot;
     this.mana = this.maxMana;
   };
 
@@ -234,52 +283,90 @@ export class Arcanist implements PlayerClass {
     };
   }
 
+  private createArcaneBarrageDefinition(): ClassAbilityDefinition {
+    return {
+      id: ARCANE_BARRAGE_ID,
+      hotkey: 2,
+      cooldown: 0,
+      baseDamage: ARCANE_BARRAGE_BASE_DAMAGE,
+      execute: (context: PlayerClassContext, abilityContext?: AbilityExecutionContext) => {
+        this.castArcaneBarrage(context, abilityContext?.damageMultiplier);
+      }
+    };
+  }
+
+  private castArcaneBarrage(context: PlayerClassContext, damageMultiplier?: number) {
+    const damage = this.createScaledDamageInstance(
+      context,
+      {
+        abilityId: ARCANE_BARRAGE_ID,
+        baseDamage: ARCANE_BARRAGE_BASE_DAMAGE,
+        tags: this.getMagicTags()
+      },
+      damageMultiplier ?? this.getDamageMultiplierSnapshot()
+    );
+    context.dealDamage(damage);
+  }
+
   private createArcaneMissilesDefinition(): ClassAbilityDefinition {
     return {
       id: ARCANE_MISSILES_ID,
-      hotkey: 2,
+      hotkey: 3,
       cooldown: 0,
       baseDamage: ARCANE_MISSILE_BASE_DAMAGE,
-      execute: (context: PlayerClassContext) => {
-        this.clearHungerStacks();
-        this.restoreMana(ARCANE_MISSILE_MANA_GAIN);
-
-        this.direction.copy(context.enemyPosition).sub(context.playerPosition);
-        if (this.direction.lengthSq() === 0) {
-          for (let i = 0; i < ARCANE_MISSILE_COUNT; i += 1) {
-            const damage = this.createScaledDamageInstance(context, {
-              abilityId: ARCANE_MISSILES_ID,
-              baseDamage: ARCANE_MISSILE_BASE_DAMAGE,
-              tags: this.getMagicTags()
-            });
-            context.dealDamage(damage);
-          }
-          return;
-        }
-
-        this.direction.normalize();
-        this.origin.copy(context.playerPosition).addScaledVector(this.direction, 0.6);
-
-        for (let i = 0; i < ARCANE_MISSILE_COUNT; i += 1) {
-          const damage = this.createScaledDamageInstance(context, {
-            abilityId: ARCANE_MISSILES_ID,
-            baseDamage: ARCANE_MISSILE_BASE_DAMAGE,
-            tags: this.getMagicTags(true)
-          });
-          const velocity = this.direction.clone().multiplyScalar(ARCANE_MISSILE_PROJECTILE_SPEED);
-          context.spawnProjectile(this.origin, velocity, {
-            color: 0x818cf8,
-            damage
-          });
-        }
+      execute: (context: PlayerClassContext, abilityContext?: AbilityExecutionContext) => {
+        this.castArcaneMissiles(context, abilityContext?.damageMultiplier);
       }
     };
+  }
+
+  private castArcaneMissiles(context: PlayerClassContext, damageMultiplier?: number) {
+    this.restoreMana(ARCANE_MISSILE_MANA_GAIN);
+
+    const multiplier = damageMultiplier ?? this.getDamageMultiplierSnapshot();
+
+    this.direction.copy(context.enemyPosition).sub(context.playerPosition);
+    if (this.direction.lengthSq() === 0) {
+      for (let i = 0; i < ARCANE_MISSILE_COUNT; i += 1) {
+        const damage = this.createScaledDamageInstance(
+          context,
+          {
+            abilityId: ARCANE_MISSILES_ID,
+            baseDamage: ARCANE_MISSILE_BASE_DAMAGE,
+            tags: this.getMagicTags()
+          },
+          multiplier
+        );
+        context.dealDamage(damage);
+      }
+      return;
+    }
+
+    this.direction.normalize();
+    this.origin.copy(context.playerPosition).addScaledVector(this.direction, 0.6);
+
+    for (let i = 0; i < ARCANE_MISSILE_COUNT; i += 1) {
+      const damage = this.createScaledDamageInstance(
+        context,
+        {
+          abilityId: ARCANE_MISSILES_ID,
+          baseDamage: ARCANE_MISSILE_BASE_DAMAGE,
+          tags: this.getMagicTags(true)
+        },
+        multiplier
+      );
+      const velocity = this.direction.clone().multiplyScalar(ARCANE_MISSILE_PROJECTILE_SPEED);
+      context.spawnProjectile(this.origin, velocity, {
+        color: 0x818cf8,
+        damage
+      });
+    }
   }
 
   private createEvocationDefinition(): ClassAbilityDefinition {
     return {
       id: EVOCATION_ID,
-      hotkey: 3,
+      hotkey: 4,
       cooldown: EVOCATION_COOLDOWN,
       execute: () => {
         // Evocation effect handled when the cast completes.
@@ -289,7 +376,8 @@ export class Arcanist implements PlayerClass {
 
   private createScaledDamageInstance(
     context: PlayerClassContext,
-    params: DamageSourceParams
+    params: DamageSourceParams,
+    damageMultiplier: number
   ): DamageInstance {
     const baseInstance = context.createDamageInstance(params);
     let cached: DamageResult | null = null;
@@ -302,11 +390,10 @@ export class Arcanist implements PlayerClass {
       resolve: () => {
         if (!cached) {
           const baseResult = baseInstance.resolve();
-          const multiplier = this.getDamageMultiplier();
           cached = {
             abilityId: baseResult.abilityId,
             baseDamage: baseResult.baseDamage,
-            amount: baseResult.amount * multiplier,
+            amount: baseResult.amount * damageMultiplier,
             tags: baseResult.tags
           };
         }
@@ -318,10 +405,20 @@ export class Arcanist implements PlayerClass {
     return instance;
   }
 
+  private getArcaneBlastCastTime(): number {
+    const reduction = this.hungerStacks * 0.1;
+    const multiplier = Math.max(0, 1 - reduction);
+    return ARCANE_BLAST_CAST_TIME * multiplier;
+  }
+
   private getDamageMultiplier(): number {
     const manaBonus = 1 + this.mana / this.maxMana;
     const hungerBonus = 1 + this.hungerStacks * HUNGER_DAMAGE_BONUS;
     return manaBonus * hungerBonus;
+  }
+
+  private getDamageMultiplierSnapshot(): number {
+    return this.getDamageMultiplier();
   }
 
   private getManaCost(baseCost: number): number {

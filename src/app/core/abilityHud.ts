@@ -4,6 +4,7 @@ export interface AbilityStatus {
   hotkey: number;
   cooldown: number;
   remainingCooldown: number;
+  highlighted?: boolean;
 }
 
 export type ClassGaugeState =
@@ -31,6 +32,7 @@ export interface AbilityHudState {
 }
 
 interface AbilitySlotElements {
+  root: HTMLDivElement;
   cooldownOverlay: HTMLDivElement;
   cooldownText: HTMLSpanElement;
   keyLabel: HTMLSpanElement;
@@ -91,6 +93,7 @@ export class AbilityHud {
       slot.appendChild(cooldownOverlay);
 
       this.slots.set(ability.slot, {
+        root: slot,
         cooldownOverlay,
         cooldownText,
         keyLabel
@@ -111,6 +114,12 @@ export class AbilityHud {
       if (!slot) continue;
 
       slot.keyLabel.textContent = status.hotkey.toString();
+
+      if (status.highlighted) {
+        slot.root.classList.add("ability-slot--highlighted");
+      } else {
+        slot.root.classList.remove("ability-slot--highlighted");
+      }
 
       if (status.remainingCooldown > 0) {
         slot.cooldownOverlay.style.display = "flex";
