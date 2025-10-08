@@ -6,16 +6,23 @@ export interface AbilityStatus {
   remainingCooldown: number;
 }
 
+export interface GaugeTimerState {
+  current: number;
+  max: number;
+}
+
 export type ClassGaugeState =
   | {
       type: "bar";
       current: number;
       max: number;
+      secondary?: GaugeTimerState;
     }
   | {
       type: "charges";
       current: number;
       max: number;
+      secondary?: GaugeTimerState;
     };
 
 export interface AbilityHudState {
@@ -35,6 +42,8 @@ export class AbilityHud {
   private readonly gaugeTrack: HTMLDivElement;
   private readonly gaugeFill: HTMLDivElement;
   private readonly gaugeCharges: HTMLDivElement;
+  private readonly secondaryGaugeTrack: HTMLDivElement;
+  private readonly secondaryGaugeFill: HTMLDivElement;
   private readonly gaugeChargeItems: HTMLDivElement[] = [];
   private readonly container: HTMLDivElement;
   private readonly slots = new Map<number, AbilitySlotElements>();
@@ -57,6 +66,14 @@ export class AbilityHud {
     this.gaugeCharges = document.createElement("div");
     this.gaugeCharges.className = "class-gauge__charges";
     this.gaugeContainer.appendChild(this.gaugeCharges);
+
+    this.secondaryGaugeTrack = document.createElement("div");
+    this.secondaryGaugeTrack.className = "class-gauge__secondary-track";
+
+    this.secondaryGaugeFill = document.createElement("div");
+    this.secondaryGaugeFill.className = "class-gauge__secondary-fill";
+    this.secondaryGaugeTrack.appendChild(this.secondaryGaugeFill);
+    this.gaugeContainer.appendChild(this.secondaryGaugeTrack);
 
     this.root.appendChild(this.gaugeContainer);
 
@@ -125,16 +142,20 @@ export class AbilityHud {
       this.gaugeContainer.style.visibility = "hidden";
       this.gaugeFill.style.width = "0%";
       this.gaugeCharges.style.display = "none";
+      this.secondaryGaugeTrack.style.display = "none";
       return;
     }
 
     this.gaugeContainer.style.visibility = "visible";
+    this.secondaryGaugeTrack.style.display = "none";
+    this.secondaryGaugeFill.style.width = "0%";
 
     if (gauge.type === "bar") {
       const ratio = gauge.max === 0 ? 0 : Math.min(Math.max(gauge.current / gauge.max, 0), 1);
       this.gaugeTrack.style.display = "block";
       this.gaugeFill.style.width = `${ratio * 100}%`;
       this.gaugeCharges.style.display = "none";
+      this.updateSecondaryGauge(gauge.secondary);
       return;
     }
 
@@ -142,12 +163,14 @@ export class AbilityHud {
       this.gaugeTrack.style.display = "none";
       this.gaugeFill.style.width = "0%";
       this.updateGaugeCharges(gauge.max, gauge.current);
+      this.updateSecondaryGauge(gauge.secondary);
       return;
     }
 
     this.gaugeTrack.style.display = "none";
     this.gaugeFill.style.width = "0%";
     this.gaugeCharges.style.display = "none";
+    this.secondaryGaugeTrack.style.display = "none";
   }
 
   private updateGaugeCharges(max: number, current: number) {
@@ -172,5 +195,16 @@ export class AbilityHud {
         charge.classList.remove("class-gauge__charge--active");
       }
     });
+  }
+
+  private updateSecondaryGauge(secondary: GaugeTimerState | undefined) {
+    if (!secondary || secondary.max <= 0) {
+      this.secondaryGaugeTrack.style.display = "none";
+      return;
+    }
+
+    const ratio = Math.min(Math.max(secondary.current / secondary.max, 0), 1);
+    this.secondaryGaugeTrack.style.display = "block";
+    this.secondaryGaugeFill.style.width = `${ratio * 100}%`;
   }
 }

@@ -2,6 +2,18 @@ import type { Vector3 } from "three";
 import type { AbilityStatus, ClassGaugeState } from "@app/core/abilityHud";
 import type { DamageInstance, DamageResult, DamageSourceParams } from "@app/core/damage";
 
+export type MeleeAttackStyle = "swing" | "thrust";
+
+export interface MeleeAttackOptions {
+  direction: Vector3;
+  duration?: number;
+  length?: number;
+  width?: number;
+  color?: number;
+  arc?: number;
+  style?: MeleeAttackStyle;
+}
+
 export interface ProjectileSpawnOptions {
   scale?: number;
   color?: number;
@@ -16,6 +28,7 @@ export interface PlayerClassContext {
   setCastProgress: (progress: number | null) => void;
   createDamageInstance: (params: DamageSourceParams) => DamageInstance;
   dealDamage: (instance: DamageInstance) => DamageResult;
+  playMeleeAttack: (options: MeleeAttackOptions) => void;
 }
 
 export interface PlayerClass {

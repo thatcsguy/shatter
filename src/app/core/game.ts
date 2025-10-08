@@ -1,4 +1,4 @@
-import { Mesh, MeshBasicMaterial, SphereGeometry, Vector3 } from "three";
+import { BoxGeometry, Group, MathUtils, Mesh, MeshBasicMaterial, SphereGeometry, Vector3 } from "three";
 import type { GameLoopStats } from "@app/core/gameLoop";
 import { GameLoop } from "@app/core/gameLoop";
 import { DebugControls } from "@app/debug/debugControls";
@@ -21,8 +21,14 @@ import { TelegraphSystem } from "@app/entities/systems/telegraphSystem";
 import { CollisionSystem } from "@app/entities/systems/collisionSystem";
 import { PlayerBlueprint } from "@app/entities/examples/entityShowcase";
 import { BlackMage } from "@app/core/classes/blackMage";
+import { Lancer } from "@app/core/classes/lancer";
 import { Marksman } from "@app/core/classes/marksman";
-import type { PlayerClass, PlayerClassContext, ProjectileSpawnOptions } from "@app/core/classes/playerClass";
+import type {
+  MeleeAttackOptions,
+  PlayerClass,
+  PlayerClassContext,
+  ProjectileSpawnOptions
+} from "@app/core/classes/playerClass";
 import { AbilityHud } from "@app/core/abilityHud";
 import type { AbilityHudState } from "@app/core/abilityHud";
 import { DamageEngine, type DamageInstance, type DamageResult, type DamageSourceParams } from "@app/core/damage";
@@ -38,12 +44,36 @@ interface ProjectileInstance {
   damage?: DamageInstance;
 }
 
-type ClassId = "marksman" | "blackMage";
+interface MeleeAttackBaseInstance {
+  pivot: Group;
+  mesh: Mesh;
+  geometry: BoxGeometry;
+  material: MeshBasicMaterial;
+  elapsed: number;
+  duration: number;
+  style: "swing" | "thrust";
+}
+
+interface SwingMeleeAttackInstance extends MeleeAttackBaseInstance {
+  style: "swing";
+  startAngle: number;
+  endAngle: number;
+}
+
+interface ThrustMeleeAttackInstance extends MeleeAttackBaseInstance {
+  style: "thrust";
+  length: number;
+}
+
+type MeleeAttackInstance = SwingMeleeAttackInstance | ThrustMeleeAttackInstance;
+
+type ClassId = "lancer" | "marksman" | "blackMage";
 
 // Allow a small amount of residual velocity while still counting the player as idle for casting.
 const PLAYER_MOVEMENT_IDLE_THRESHOLD_SQ = 0.1 * 0.1;
 
 const CLASS_OPTIONS: { id: ClassId; label: string }[] = [
+  { id: "lancer", label: "Lancer" },
   { id: "marksman", label: "Marksman" },
   { id: "blackMage", label: "Black Mage" }
 ];
@@ -60,6 +90,7 @@ export class ShatterGame {
   private readonly player: PlayerToken;
   private readonly boss = this.encounter.boss.create();
   private readonly classFactories: Record<ClassId, () => PlayerClass> = {
+    lancer: () => new Lancer(),
     marksman: () => new Marksman(),
     blackMage: () => new BlackMage()
   };
@@ -70,7 +101,9 @@ export class ShatterGame {
   private readonly projectileGeometry = new SphereGeometry(0.14, 12, 12);
   private readonly projectileMaterial = new MeshBasicMaterial({ color: 0xfef08a });
   private readonly projectileScratch = new Vector3();
+  private readonly meleeDirection = new Vector3();
   private readonly projectiles: ProjectileInstance[] = [];
+  private readonly meleeAttacks: MeleeAttackInstance[] = [];
   private readonly overlay: DebugOverlay;
   private readonly debugControls: DebugControls;
   private readonly abilityHud: AbilityHud;
@@ -78,7 +111,7 @@ export class ShatterGame {
   private readonly playerEntity: Entity;
   private readonly playerTransform: TransformComponent;
   private readonly playerMotion: MotionComponent;
-  private currentClassId: ClassId = "marksman";
+  private currentClassId: ClassId = "lancer";
   private playerClass: PlayerClass;
   private classContext!: PlayerClassContext;
   private statsListener: GameStatsListener | null = null;
@@ -119,7 +152,8 @@ export class ShatterGame {
       spawnProjectile: this.spawnProjectile,
       setCastProgress: (progress) => this.player.setCastProgress(progress),
       createDamageInstance: this.createDamageInstance,
-      dealDamage: this.dealDamageToBoss
+      dealDamage: this.dealDamageToBoss,
+      playMeleeAttack: this.playMeleeAttack
     };
 
     this.loop = new GameLoop(this.update);
@@ -165,6 +199,7 @@ export class ShatterGame {
     this.abilityHud.dispose();
     this.player.setCastProgress(null);
     this.clearProjectiles();
+    this.clearMeleeAttacks();
     this.damageNumbers.dispose();
     this.ctx.scene.remove(this.boss.mesh);
     this.projectileGeometry.dispose();
@@ -226,6 +261,7 @@ export class ShatterGame {
     this.abilityHud.update(this.getAbilityHudState());
 
     this.updateProjectiles(deltaTime);
+    this.updateMeleeAttacks(deltaTime);
 
     this.damageTracker.update(deltaTime);
     this.overlay.updateDamageTracker(this.damageTracker.getState());
@@ -275,6 +311,7 @@ export class ShatterGame {
     this.classContext.isPlayerMoving = previousMovement;
     this.player.setCastProgress(null);
     this.clearProjectiles();
+    this.clearMeleeAttacks();
     this.enforceArenaBounds();
   }
 
@@ -301,6 +338,73 @@ export class ShatterGame {
       material: options?.color ? material : undefined,
       damage: options?.damage
     });
+  };
+
+  private readonly playMeleeAttack = (options: MeleeAttackOptions) => {
+    const direction = this.meleeDirection.copy(options.direction);
+    direction.y = 0;
+    if (direction.lengthSq() === 0) {
+      return;
+    }
+
+    direction.normalize();
+
+    const style = options.style ?? "swing";
+    const duration = Math.max(options.duration ?? 0.25, 0.05);
+    const length = options.length ?? 2.2;
+    const width = options.width ?? 0.16;
+    const arc = options.arc ?? Math.PI / 2;
+    const color = options.color ?? 0xfacc15;
+
+    const geometry = new BoxGeometry(width, 0.12, length);
+    const material = new MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthWrite: false });
+    const mesh = new Mesh(geometry, material);
+    mesh.renderOrder = 2;
+    mesh.position.y = 0.35;
+
+    const pivot = new Group();
+    pivot.position.set(this.playerPosition.x, 0.25, this.playerPosition.z);
+    pivot.add(mesh);
+    this.ctx.scene.add(pivot);
+
+    const yaw = Math.atan2(direction.x, direction.z);
+
+    if (style === "swing") {
+      const startAngle = yaw - arc / 2;
+      const endAngle = yaw + arc / 2;
+      mesh.position.z = length / 2;
+      mesh.scale.set(1, 1, 1);
+      pivot.rotation.y = startAngle;
+      const instance: SwingMeleeAttackInstance = {
+        pivot,
+        mesh,
+        geometry,
+        material,
+        elapsed: 0,
+        duration,
+        style,
+        startAngle,
+        endAngle
+      };
+      this.meleeAttacks.push(instance);
+      return;
+    }
+
+    mesh.scale.set(1, 1, 0.3);
+    mesh.position.z = (length * mesh.scale.z) / 2;
+    pivot.rotation.y = yaw;
+
+    const instance: ThrustMeleeAttackInstance = {
+      pivot,
+      mesh,
+      geometry,
+      material,
+      elapsed: 0,
+      duration,
+      style: "thrust",
+      length
+    };
+    this.meleeAttacks.push(instance);
   };
 
   private getAbilityHudState(): AbilityHudState {
@@ -332,6 +436,48 @@ export class ShatterGame {
     }
   }
 
+  private updateMeleeAttacks(deltaTime: number) {
+    for (let i = this.meleeAttacks.length - 1; i >= 0; i -= 1) {
+      const attack = this.meleeAttacks[i];
+      attack.elapsed += deltaTime;
+      const duration = attack.duration <= 0 ? 0.0001 : attack.duration;
+      const progress = MathUtils.clamp(attack.elapsed / duration, 0, 1);
+
+      if (attack.style === "swing") {
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const angle = attack.startAngle + (attack.endAngle - attack.startAngle) * eased;
+        attack.pivot.rotation.y = angle;
+      } else {
+        const extend = progress < 0.5 ? progress / 0.5 : 1 - (progress - 0.5) / 0.5;
+        const clampedExtend = MathUtils.clamp(extend, 0, 1);
+        const extent = 0.25 + clampedExtend * 0.75;
+        attack.mesh.scale.z = extent;
+        attack.mesh.position.z = (attack.length * extent) / 2;
+      }
+
+      attack.material.opacity = 0.95 * (1 - progress);
+
+      if (progress >= 1) {
+        this.removeMeleeAttack(i);
+      }
+    }
+  }
+
+  private removeMeleeAttack(index: number) {
+    const attack = this.meleeAttacks[index];
+    if (!attack) return;
+    this.ctx.scene.remove(attack.pivot);
+    attack.geometry.dispose();
+    attack.material.dispose();
+    this.meleeAttacks.splice(index, 1);
+  }
+
+  private clearMeleeAttacks() {
+    while (this.meleeAttacks.length > 0) {
+      this.removeMeleeAttack(this.meleeAttacks.length - 1);
+    }
+  }
+
   private createClass(id: ClassId): PlayerClass {
     const factory = this.classFactories[id];
     return factory();
@@ -346,6 +492,7 @@ export class ShatterGame {
     this.playerClass = this.createClass(id);
     this.classContext.isPlayerMoving = false;
     this.player.setCastProgress(null);
+    this.clearMeleeAttacks();
     this.overlay.setCurrentClass(id);
     this.abilityHud.update(this.getAbilityHudState());
   };
