@@ -42,7 +42,10 @@ canvas {
 .class-gauge {
   min-width: 284px;
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 6px;
   padding: 0 8px;
   visibility: hidden;
 }
@@ -67,6 +70,7 @@ canvas {
 
 .class-gauge__charges {
   display: none;
+  justify-content: center;
   gap: 8px;
   align-items: center;
 }
@@ -84,6 +88,21 @@ canvas {
 .class-gauge__charge--active {
   border-color: rgba(56, 189, 248, 0.9);
   background: linear-gradient(135deg, rgba(56, 189, 248, 0.75), rgba(14, 116, 144, 0.9));
+}
+
+.class-gauge__charge--hunger {
+  border-radius: 999px;
+  width: 14px;
+  height: 14px;
+  border-color: rgba(249, 115, 22, 0.7);
+  background: rgba(30, 27, 75, 0.55);
+  box-shadow: inset 0 0 6px rgba(14, 116, 144, 0.6);
+}
+
+.class-gauge__charge--hunger.class-gauge__charge--active {
+  border-color: rgba(249, 115, 22, 0.95);
+  background: linear-gradient(135deg, rgba(252, 211, 77, 0.85), rgba(249, 115, 22, 0.95));
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.75);
 }
 
 .ability-bar {
@@ -109,7 +128,26 @@ canvas {
   font-weight: 600;
   letter-spacing: 0.02em;
   background: rgba(30, 41, 59, 0.55);
-  overflow: hidden;
+  overflow: visible;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  z-index: 0;
+}
+
+.ability-slot--highlighted {
+  border-color: #c4b5fd;
+  box-shadow: 0 0 24px rgba(129, 140, 248, 0.95), 0 0 48px rgba(99, 102, 241, 0.65);
+  background: radial-gradient(circle at 50% 50%, rgba(129, 140, 248, 0.7), rgba(30, 41, 59, 0.92));
+  animation: ability-slot-glow 0.8s ease-in-out infinite alternate;
+}
+
+.ability-slot--highlighted::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 14px;
+  background: radial-gradient(circle, rgba(129, 140, 248, 0.35), transparent 65%);
+  pointer-events: none;
+  z-index: -1;
 }
 
 .ability-slot__label {
@@ -130,4 +168,16 @@ canvas {
   font-size: 18px;
   font-weight: 700;
   background: rgba(15, 23, 42, 0.65);
+}
+
+@keyframes ability-slot-glow {
+  from {
+    transform: scale(1.08);
+    box-shadow: 0 0 18px rgba(129, 140, 248, 0.85), 0 0 28px rgba(99, 102, 241, 0.45);
+  }
+
+  to {
+    transform: scale(1.18);
+    box-shadow: 0 0 36px rgba(129, 140, 248, 1), 0 0 56px rgba(99, 102, 241, 0.8);
+  }
 }

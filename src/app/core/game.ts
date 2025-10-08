@@ -21,31 +21,36 @@ import { TelegraphSystem } from "@app/entities/systems/telegraphSystem";
 import { CollisionSystem } from "@app/entities/systems/collisionSystem";
 import { PlayerBlueprint } from "@app/entities/examples/entityShowcase";
 import { BlackMage } from "@app/core/classes/blackMage";
+import { Arcanist } from "@app/core/classes/arcanist";
 import { Marksman } from "@app/core/classes/marksman";
-import type { PlayerClass, PlayerClassContext, ProjectileSpawnOptions } from "@app/core/classes/playerClass";
+import type {
+  PlayerClass,
+  PlayerClassContext,
+  ProjectileRuntimeState,
+  ProjectileSpawnOptions
+} from "@app/core/classes/playerClass";
 import { AbilityHud } from "@app/core/abilityHud";
 import type { AbilityHudState } from "@app/core/abilityHud";
 import { DamageEngine, type DamageInstance, type DamageResult, type DamageSourceParams } from "@app/core/damage";
 import { DamageTracker } from "@app/core/damageTracker";
 import { DamageNumberManager } from "@app/rendering/damageNumbers";
 
-interface ProjectileInstance {
-  mesh: Mesh;
-  position: Vector3;
-  velocity: Vector3;
+interface ProjectileInstance extends ProjectileRuntimeState {
   lifetime: number;
   material?: MeshBasicMaterial;
   damage?: DamageInstance;
+  onUpdate?: (projectile: ProjectileRuntimeState, deltaTime: number) => void;
 }
 
-type ClassId = "marksman" | "blackMage";
+type ClassId = "marksman" | "blackMage" | "arcanist";
 
 // Allow a small amount of residual velocity while still counting the player as idle for casting.
 const PLAYER_MOVEMENT_IDLE_THRESHOLD_SQ = 0.1 * 0.1;
 
 const CLASS_OPTIONS: { id: ClassId; label: string }[] = [
   { id: "marksman", label: "Marksman" },
-  { id: "blackMage", label: "Black Mage" }
+  { id: "blackMage", label: "Black Mage" },
+  { id: "arcanist", label: "Arcanist" }
 ];
 
 export interface GameStatsListener {
@@ -61,7 +66,8 @@ export class ShatterGame {
   private readonly boss = this.encounter.boss.create();
   private readonly classFactories: Record<ClassId, () => PlayerClass> = {
     marksman: () => new Marksman(),
-    blackMage: () => new BlackMage()
+    blackMage: () => new BlackMage(),
+    arcanist: () => new Arcanist()
   };
   private readonly direction = new Vector3();
   private readonly playerPosition = new Vector3();
@@ -288,18 +294,22 @@ export class ShatterGame {
       : this.projectileMaterial;
     const mesh = new Mesh(this.projectileGeometry, material);
     const position = new Vector3(origin.x, 0.25, origin.z);
+    const displayPosition = position.clone();
     const direction = new Vector3().copy(velocity);
     direction.y = 0;
-    mesh.position.set(position.x, position.y, position.z);
+    mesh.position.set(displayPosition.x, displayPosition.y, displayPosition.z);
     mesh.scale.setScalar(options?.scale ?? 1);
     this.ctx.scene.add(mesh);
     this.projectiles.push({
       mesh,
       position,
+      displayPosition,
       velocity: direction,
-      lifetime: 2,
+      lifetime: options?.lifetime ?? 2,
+      age: 0,
       material: options?.color ? material : undefined,
-      damage: options?.damage
+      damage: options?.damage,
+      onUpdate: options?.onUpdate
     });
   };
 
@@ -313,8 +323,17 @@ export class ShatterGame {
   private updateProjectiles(deltaTime: number) {
     for (let i = this.projectiles.length - 1; i >= 0; i -= 1) {
       const projectile = this.projectiles[i];
+      projectile.age += deltaTime;
       projectile.position.addScaledVector(projectile.velocity, deltaTime);
-      projectile.mesh.position.set(projectile.position.x, projectile.position.y, projectile.position.z);
+      projectile.displayPosition.copy(projectile.position);
+      if (projectile.onUpdate) {
+        projectile.onUpdate(projectile, deltaTime);
+      }
+      projectile.mesh.position.set(
+        projectile.displayPosition.x,
+        projectile.displayPosition.y,
+        projectile.displayPosition.z
+      );
       projectile.lifetime -= deltaTime;
       if (projectile.lifetime <= 0) {
         this.removeProjectile(i);

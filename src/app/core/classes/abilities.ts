@@ -2,6 +2,7 @@ import type { PlayerClassContext } from "@app/core/classes/playerClass";
 
 export interface AbilityExecutionContext {
   empowered?: boolean;
+  damageMultiplier?: number;
 }
 
 export interface ClassAbilityDefinition {
