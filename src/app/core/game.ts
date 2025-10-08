@@ -340,7 +340,7 @@ export class ShatterGame {
         continue;
       }
 
-      this.projectileScratch.copy(projectile.displayPosition).sub(this.bossPosition);
+      this.projectileScratch.copy(projectile.position).sub(this.bossPosition);
       this.projectileScratch.y = 0;
       if (this.projectileScratch.lengthSq() < 0.35 * 0.35) {
         if (projectile.damage) {
