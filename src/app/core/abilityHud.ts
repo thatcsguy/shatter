@@ -16,6 +16,13 @@ export type ClassGaugeState =
       type: "charges";
       current: number;
       max: number;
+    }
+  | {
+      type: "manaHunger";
+      manaCurrent: number;
+      manaMax: number;
+      hungerCurrent: number;
+      hungerMax: number;
     };
 
 export interface AbilityHudState {
@@ -36,6 +43,7 @@ export class AbilityHud {
   private readonly gaugeFill: HTMLDivElement;
   private readonly gaugeCharges: HTMLDivElement;
   private readonly gaugeChargeItems: HTMLDivElement[] = [];
+  private gaugeChargeModifier: string | null = null;
   private readonly container: HTMLDivElement;
   private readonly slots = new Map<number, AbilitySlotElements>();
 
@@ -46,17 +54,18 @@ export class AbilityHud {
     this.gaugeContainer = document.createElement("div");
     this.gaugeContainer.className = "class-gauge";
 
+    this.gaugeCharges = document.createElement("div");
+    this.gaugeCharges.className = "class-gauge__charges";
+
     this.gaugeTrack = document.createElement("div");
     this.gaugeTrack.className = "class-gauge__track";
 
     this.gaugeFill = document.createElement("div");
     this.gaugeFill.className = "class-gauge__fill";
     this.gaugeTrack.appendChild(this.gaugeFill);
-    this.gaugeContainer.appendChild(this.gaugeTrack);
 
-    this.gaugeCharges = document.createElement("div");
-    this.gaugeCharges.className = "class-gauge__charges";
     this.gaugeContainer.appendChild(this.gaugeCharges);
+    this.gaugeContainer.appendChild(this.gaugeTrack);
 
     this.root.appendChild(this.gaugeContainer);
 
@@ -145,23 +154,45 @@ export class AbilityHud {
       return;
     }
 
+    if (gauge.type === "manaHunger") {
+      const ratio =
+        gauge.manaMax === 0 ? 0 : Math.min(Math.max(gauge.manaCurrent / gauge.manaMax, 0), 1);
+      this.gaugeTrack.style.display = "block";
+      this.gaugeFill.style.width = `${ratio * 100}%`;
+      this.updateGaugeCharges(gauge.hungerMax, gauge.hungerCurrent, "class-gauge__charge--hunger");
+      return;
+    }
+
     this.gaugeTrack.style.display = "none";
     this.gaugeFill.style.width = "0%";
     this.gaugeCharges.style.display = "none";
   }
 
-  private updateGaugeCharges(max: number, current: number) {
+  private updateGaugeCharges(max: number, current: number, modifierClass?: string) {
     this.gaugeCharges.style.display = "flex";
 
-    if (this.gaugeChargeItems.length !== max) {
+    if (this.gaugeChargeItems.length !== max || this.gaugeChargeModifier !== (modifierClass ?? null)) {
       this.gaugeCharges.replaceChildren();
       this.gaugeChargeItems.length = 0;
+      this.gaugeChargeModifier = modifierClass ?? null;
 
       for (let i = 0; i < max; i += 1) {
         const charge = document.createElement("div");
         charge.className = "class-gauge__charge";
+        if (modifierClass) {
+          charge.classList.add(modifierClass);
+        }
         this.gaugeCharges.appendChild(charge);
         this.gaugeChargeItems.push(charge);
+      }
+    } else if (modifierClass) {
+      for (const charge of this.gaugeChargeItems) {
+        charge.className = "class-gauge__charge";
+        charge.classList.add(modifierClass);
+      }
+    } else {
+      for (const charge of this.gaugeChargeItems) {
+        charge.className = "class-gauge__charge";
       }
     }
 

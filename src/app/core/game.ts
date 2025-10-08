@@ -21,6 +21,7 @@ import { TelegraphSystem } from "@app/entities/systems/telegraphSystem";
 import { CollisionSystem } from "@app/entities/systems/collisionSystem";
 import { PlayerBlueprint } from "@app/entities/examples/entityShowcase";
 import { BlackMage } from "@app/core/classes/blackMage";
+import { Arcanist } from "@app/core/classes/arcanist";
 import { Marksman } from "@app/core/classes/marksman";
 import type { PlayerClass, PlayerClassContext, ProjectileSpawnOptions } from "@app/core/classes/playerClass";
 import { AbilityHud } from "@app/core/abilityHud";
@@ -38,14 +39,15 @@ interface ProjectileInstance {
   damage?: DamageInstance;
 }
 
-type ClassId = "marksman" | "blackMage";
+type ClassId = "marksman" | "blackMage" | "arcanist";
 
 // Allow a small amount of residual velocity while still counting the player as idle for casting.
 const PLAYER_MOVEMENT_IDLE_THRESHOLD_SQ = 0.1 * 0.1;
 
 const CLASS_OPTIONS: { id: ClassId; label: string }[] = [
   { id: "marksman", label: "Marksman" },
-  { id: "blackMage", label: "Black Mage" }
+  { id: "blackMage", label: "Black Mage" },
+  { id: "arcanist", label: "Arcanist" }
 ];
 
 export interface GameStatsListener {
@@ -61,7 +63,8 @@ export class ShatterGame {
   private readonly boss = this.encounter.boss.create();
   private readonly classFactories: Record<ClassId, () => PlayerClass> = {
     marksman: () => new Marksman(),
-    blackMage: () => new BlackMage()
+    blackMage: () => new BlackMage(),
+    arcanist: () => new Arcanist()
   };
   private readonly direction = new Vector3();
   private readonly playerPosition = new Vector3();

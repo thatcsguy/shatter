@@ -42,7 +42,10 @@ canvas {
 .class-gauge {
   min-width: 284px;
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 6px;
   padding: 0 8px;
   visibility: hidden;
 }
@@ -67,6 +70,7 @@ canvas {
 
 .class-gauge__charges {
   display: none;
+  justify-content: center;
   gap: 8px;
   align-items: center;
 }
@@ -84,6 +88,21 @@ canvas {
 .class-gauge__charge--active {
   border-color: rgba(56, 189, 248, 0.9);
   background: linear-gradient(135deg, rgba(56, 189, 248, 0.75), rgba(14, 116, 144, 0.9));
+}
+
+.class-gauge__charge--hunger {
+  border-radius: 999px;
+  width: 14px;
+  height: 14px;
+  border-color: rgba(249, 115, 22, 0.7);
+  background: rgba(30, 27, 75, 0.55);
+  box-shadow: inset 0 0 6px rgba(14, 116, 144, 0.6);
+}
+
+.class-gauge__charge--hunger.class-gauge__charge--active {
+  border-color: rgba(249, 115, 22, 0.95);
+  background: linear-gradient(135deg, rgba(252, 211, 77, 0.85), rgba(249, 115, 22, 0.95));
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.75);
 }
 
 .ability-bar {
