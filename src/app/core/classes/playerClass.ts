@@ -1,11 +1,21 @@
-import type { Vector3 } from "three";
+import type { Mesh, Vector3 } from "three";
 import type { AbilityStatus, ClassGaugeState } from "@app/core/abilityHud";
 import type { DamageInstance, DamageResult, DamageSourceParams } from "@app/core/damage";
+
+export interface ProjectileRuntimeState {
+  position: Vector3;
+  displayPosition: Vector3;
+  velocity: Vector3;
+  mesh: Mesh;
+  age: number;
+}
 
 export interface ProjectileSpawnOptions {
   scale?: number;
   color?: number;
   damage?: DamageInstance;
+  lifetime?: number;
+  onUpdate?: (projectile: ProjectileRuntimeState, deltaTime: number) => void;
 }
 
 export interface PlayerClassContext {

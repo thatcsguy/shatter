@@ -5,7 +5,11 @@ import type {
   ClassAbilityDefinition,
   ClassAbilityState
 } from "@app/core/classes/abilities";
-import type { PlayerClass, PlayerClassContext } from "@app/core/classes/playerClass";
+import type {
+  PlayerClass,
+  PlayerClassContext,
+  ProjectileRuntimeState
+} from "@app/core/classes/playerClass";
 import type { DamageInstance, DamageResult, DamageSourceParams, DamageTag } from "@app/core/damage";
 
 const MAX_MANA = 100;
@@ -21,11 +25,16 @@ const ARCANE_BLAST_ID = "arcanist-arcane-blast";
 const ARCANE_BARRAGE_BASE_DAMAGE = 10;
 const ARCANE_BARRAGE_BASE_COST = 10;
 const ARCANE_BARRAGE_ID = "arcanist-arcane-barrage";
+const ARCANE_BARRAGE_PROJECTILE_SPEED = 20;
 
 const ARCANE_MISSILE_COUNT = 3;
 const ARCANE_MISSILE_BASE_DAMAGE = 5;
 const ARCANE_MISSILE_MANA_GAIN = 10;
 const ARCANE_MISSILE_PROJECTILE_SPEED = 16;
+const ARCANE_MISSILE_PROJECTILE_LIFETIME = 3;
+const ARCANE_MISSILE_WAVE_AMPLITUDE = 0.8;
+const ARCANE_MISSILE_WAVE_FREQUENCY = 7.5;
+const ARCANE_MISSILE_PULSE_STRENGTH = 0.08;
 const ARCANE_MISSILES_ID = "arcanist-arcane-missiles";
 
 const EVOCATION_CAST_TIME = 5;
@@ -49,6 +58,7 @@ export class Arcanist implements PlayerClass {
   private readonly abilities: ClassAbilityState[];
   private readonly direction = new Vector3();
   private readonly origin = new Vector3();
+  private readonly lateral = new Vector3();
 
   private readonly maxMana = MAX_MANA;
   private mana = MAX_MANA;
@@ -301,11 +311,33 @@ export class Arcanist implements PlayerClass {
       {
         abilityId: ARCANE_BARRAGE_ID,
         baseDamage: ARCANE_BARRAGE_BASE_DAMAGE,
-        tags: this.getMagicTags()
+        tags: this.getMagicTags(true)
       },
       damageMultiplier ?? this.getDamageMultiplierSnapshot()
     );
-    context.dealDamage(damage);
+    this.direction.copy(context.enemyPosition).sub(context.playerPosition);
+    if (this.direction.lengthSq() === 0) {
+      context.dealDamage(damage);
+      return;
+    }
+
+    this.direction.normalize();
+    this.origin.copy(context.playerPosition).addScaledVector(this.direction, 0.65);
+    const baseScale = 1.15;
+    const origin = this.origin.clone();
+    const velocity = this.direction.clone().multiplyScalar(ARCANE_BARRAGE_PROJECTILE_SPEED);
+
+    context.spawnProjectile(origin, velocity, {
+      color: 0xf472b6,
+      scale: baseScale,
+      damage,
+      lifetime: 2.4,
+      onUpdate: (projectile, _deltaTime) => {
+        void _deltaTime;
+        const pulse = baseScale * (1 + 0.12 * Math.sin(projectile.age * 8));
+        projectile.mesh.scale.setScalar(pulse);
+      }
+    });
   }
 
   private createArcaneMissilesDefinition(): ClassAbilityDefinition {
@@ -344,6 +376,13 @@ export class Arcanist implements PlayerClass {
 
     this.direction.normalize();
     this.origin.copy(context.playerPosition).addScaledVector(this.direction, 0.6);
+    this.lateral.set(-this.direction.z, 0, this.direction.x);
+    const hasLateral = this.lateral.lengthSq() > 0;
+    if (hasLateral) {
+      this.lateral.normalize();
+    }
+
+    const baseVelocity = this.direction.clone().multiplyScalar(ARCANE_MISSILE_PROJECTILE_SPEED);
 
     for (let i = 0; i < ARCANE_MISSILE_COUNT; i += 1) {
       const damage = this.createScaledDamageInstance(
@@ -355,12 +394,37 @@ export class Arcanist implements PlayerClass {
         },
         multiplier
       );
-      const velocity = this.direction.clone().multiplyScalar(ARCANE_MISSILE_PROJECTILE_SPEED);
-      context.spawnProjectile(this.origin, velocity, {
-        color: 0x818cf8,
-        damage
+      const origin = this.origin.clone();
+      if (hasLateral) {
+        origin.addScaledVector(this.lateral, (i - 1) * 0.22);
+      }
+
+      const velocity = baseVelocity.clone();
+      context.spawnProjectile(origin, velocity, {
+        color: 0xc7d2fe,
+        damage,
+        lifetime: ARCANE_MISSILE_PROJECTILE_LIFETIME,
+        onUpdate:
+          i === 0 || !hasLateral
+            ? (projectile, _deltaTime) => {
+                void _deltaTime;
+                const pulse = 1 + ARCANE_MISSILE_PULSE_STRENGTH * Math.sin(projectile.age * 10);
+                projectile.mesh.scale.setScalar(pulse);
+              }
+            : this.createMissileWaveBehavior(i === 1 ? 0 : Math.PI)
       });
     }
+  }
+
+  private createMissileWaveBehavior(phase: number) {
+    const waveDirection = this.lateral.clone();
+    return (projectile: ProjectileRuntimeState, _deltaTime: number) => {
+      void _deltaTime;
+      const offset = Math.sin(projectile.age * ARCANE_MISSILE_WAVE_FREQUENCY + phase);
+      projectile.displayPosition.addScaledVector(waveDirection, offset * ARCANE_MISSILE_WAVE_AMPLITUDE);
+      const pulse = 1 + ARCANE_MISSILE_PULSE_STRENGTH * Math.sin(projectile.age * 12 + phase);
+      projectile.mesh.scale.setScalar(pulse);
+    };
   }
 
   private createEvocationDefinition(): ClassAbilityDefinition {
