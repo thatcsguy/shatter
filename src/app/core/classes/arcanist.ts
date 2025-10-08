@@ -23,7 +23,6 @@ const ARCANE_BLAST_BASE_COST = 15;
 const ARCANE_BLAST_ID = "arcanist-arcane-blast";
 
 const ARCANE_BARRAGE_BASE_DAMAGE = 10;
-const ARCANE_BARRAGE_BASE_COST = 10;
 const ARCANE_BARRAGE_ID = "arcanist-arcane-barrage";
 const ARCANE_BARRAGE_PROJECTILE_SPEED = 20;
 
@@ -174,15 +173,9 @@ export class Arcanist implements PlayerClass {
       return false;
     }
 
-    const manaCost = this.getManaCost(ARCANE_BARRAGE_BASE_COST);
-    if (this.mana < manaCost) {
-      return false;
-    }
-
     const stacksConsumed = this.hungerStacks;
     const damageMultiplier = this.getDamageMultiplierSnapshot() * (1 + stacksConsumed);
 
-    this.spendMana(manaCost);
     this.clearHungerStacks();
 
     ability.definition.execute(context, { damageMultiplier });
@@ -270,7 +263,7 @@ export class Arcanist implements PlayerClass {
     context.dealDamage(damage);
     this.addHungerStack();
 
-    if (Math.random() < 0.1) {
+    if (Math.random() < 0.15) {
       this.hasClearcasting = true;
     }
   };
@@ -420,8 +413,13 @@ export class Arcanist implements PlayerClass {
     const waveDirection = this.lateral.clone();
     return (projectile: ProjectileRuntimeState, _deltaTime: number) => {
       void _deltaTime;
+      const lifeProgress = Math.min(projectile.age / ARCANE_MISSILE_PROJECTILE_LIFETIME, 1);
       const offset = Math.sin(projectile.age * ARCANE_MISSILE_WAVE_FREQUENCY + phase);
-      projectile.displayPosition.addScaledVector(waveDirection, offset * ARCANE_MISSILE_WAVE_AMPLITUDE);
+      const falloff = 1 - lifeProgress;
+      projectile.displayPosition.addScaledVector(
+        waveDirection,
+        offset * ARCANE_MISSILE_WAVE_AMPLITUDE * falloff
+      );
       const pulse = 1 + ARCANE_MISSILE_PULSE_STRENGTH * Math.sin(projectile.age * 12 + phase);
       projectile.mesh.scale.setScalar(pulse);
     };
