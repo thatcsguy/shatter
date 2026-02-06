@@ -33,6 +33,7 @@ export interface PlayerState {
   position: Vec3;
   velocity: Vec3;
   isGrounded: boolean;
+  jumpHorizontalVelocity: Vec3;
   lastProcessedInput: number;
   color: number;
 }

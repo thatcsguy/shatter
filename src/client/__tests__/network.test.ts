@@ -44,6 +44,7 @@ function makePlayerState(overrides: Partial<PlayerState> = {}): PlayerState {
     position: { x: ARENA_SIZE / 2, y: 0, z: ARENA_SIZE / 2 },
     velocity: { x: 0, y: 0, z: 0 },
     isGrounded: true,
+    jumpHorizontalVelocity: { x: 0, y: 0, z: 0 },
     lastProcessedInput: 0,
     color: 0x4a90d9,
     ...overrides,

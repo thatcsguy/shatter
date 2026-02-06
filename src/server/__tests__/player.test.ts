@@ -111,6 +111,7 @@ describe('Player', () => {
       position: expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), z: expect.any(Number) }),
       velocity: expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), z: expect.any(Number) }),
       isGrounded: true,
+      jumpHorizontalVelocity: { x: 0, y: 0, z: 0 },
       lastProcessedInput: 7,
       color: 0x4a90d9,
     });

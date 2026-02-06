@@ -51,6 +51,7 @@ export class Player {
       position: { ...this.position },
       velocity: { ...this.velocity },
       isGrounded: this.isGrounded,
+      jumpHorizontalVelocity: { ...this.jumpHorizontalVelocity },
       lastProcessedInput: this.lastProcessedInput,
       color: this.color,
     };
