@@ -5,6 +5,8 @@ import {
   GameState,
   ARENA_SIZE,
   PLAYER_SPEED,
+  JUMP_VELOCITY,
+  GRAVITY,
   INTERPOLATION_BUFFER_SIZE,
 } from '../../shared/types.js';
 
@@ -23,6 +25,7 @@ vi.mock('socket.io-client', () => ({
 }));
 
 import { NetworkManager } from '../network.js';
+import { applyPhysics } from '../../shared/physics.js';
 
 // --- Helpers ---
 
@@ -162,6 +165,82 @@ describe('NetworkManager', () => {
 
       expect(nm.pendingCount).toBe(0);
       expect(nm.localState!.position).toEqual(serverPos);
+    });
+
+    it('preserves horizontal momentum during jump reconciliation', () => {
+      joinGame(nm);
+      const dt = 1 / 60;
+
+      // Jump while moving forward
+      nm.sendInput(makeInput({ seq: 1, dz: 1, jump: true, dt }));
+      // Continue airborne
+      nm.sendInput(makeInput({ seq: 2, dt }));
+      nm.sendInput(makeInput({ seq: 3, dt }));
+
+      // Server acks seq 1 with correct mid-jump state
+      const jumpVelZ = -PLAYER_SPEED;
+      const velY = JUMP_VELOCITY + GRAVITY * dt;
+      const serverState = makePlayerState({
+        id: 'local',
+        position: {
+          x: ARENA_SIZE / 2,
+          y: JUMP_VELOCITY * dt + GRAVITY * dt * dt,
+          z: ARENA_SIZE / 2 + jumpVelZ * dt,
+        },
+        velocity: { x: 0, y: velY, z: jumpVelZ },
+        isGrounded: false,
+        jumpHorizontalVelocity: { x: 0, y: 0, z: jumpVelZ },
+        lastProcessedInput: 1,
+      });
+      handlers['game:state'](makeGameState({ local: serverState }));
+
+      // After reconciliation, player should still be moving forward (negative Z)
+      expect(nm.localState!.jumpHorizontalVelocity.z).toBeCloseTo(jumpVelZ);
+      expect(nm.localState!.isGrounded).toBe(false);
+      // Position should have continued forward from server state
+      expect(nm.localState!.position.z).toBeLessThan(serverState.position.z);
+    });
+
+    it('matches pure prediction after reconciliation + replay during jump', () => {
+      joinGame(nm);
+      const dt = 1 / 60;
+
+      // Record position before any inputs
+      const startPos = { ...nm.localState!.position };
+
+      // Send inputs: jump while moving, then continue airborne
+      nm.sendInput(makeInput({ seq: 1, dz: 1, jump: true, dt }));
+      nm.sendInput(makeInput({ seq: 2, dt }));
+      nm.sendInput(makeInput({ seq: 3, dt }));
+
+      // Save predicted state before reconciliation
+      const predictedPos = { ...nm.localState!.position };
+
+      // Simulate identical server physics for seq 1
+      const serverPhysics = applyPhysics(
+        {
+          position: { ...startPos },
+          velocity: { x: 0, y: 0, z: 0 },
+          isGrounded: true,
+          jumpHorizontalVelocity: { x: 0, y: 0, z: 0 },
+        },
+        makeInput({ seq: 1, dz: 1, jump: true, dt }),
+      );
+
+      const serverState = makePlayerState({
+        id: 'local',
+        position: { ...serverPhysics.position },
+        velocity: { ...serverPhysics.velocity },
+        isGrounded: serverPhysics.isGrounded,
+        jumpHorizontalVelocity: { ...serverPhysics.jumpHorizontalVelocity },
+        lastProcessedInput: 1,
+      });
+      handlers['game:state'](makeGameState({ local: serverState }));
+
+      // After reconciliation + replay, position should match original prediction
+      expect(nm.localState!.position.x).toBeCloseTo(predictedPos.x);
+      expect(nm.localState!.position.y).toBeCloseTo(predictedPos.y);
+      expect(nm.localState!.position.z).toBeCloseTo(predictedPos.z);
     });
   });
 

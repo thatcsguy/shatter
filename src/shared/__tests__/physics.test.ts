@@ -219,4 +219,77 @@ describe('applyPhysics', () => {
     const slowDist = 20 - slow.position.z;
     expect(fastDist).toBeCloseTo(slowDist * 2, 5);
   });
+
+  it('round-trips jumpHorizontalVelocity through simulate-reconcile-replay', () => {
+    const dt = 1 / 60;
+    const inputs = [
+      makeInput({ seq: 1, dz: 1, jump: true, dt }),
+      makeInput({ seq: 2, dz: 1, dt }),
+      makeInput({ seq: 3, dz: 0, dt }),
+    ];
+
+    // Continuous simulation (client prediction)
+    let continuous = makeState();
+    for (const input of inputs) {
+      continuous = applyPhysics(continuous, input);
+    }
+
+    // Simulate server acking seq 1: take state after input 1 as "server state"
+    const serverState = applyPhysics(makeState(), inputs[0]);
+
+    // Reconcile: reset to server state, replay inputs 2 and 3
+    let reconciled: PhysicsState = {
+      position: { ...serverState.position },
+      velocity: { ...serverState.velocity },
+      isGrounded: serverState.isGrounded,
+      jumpHorizontalVelocity: { ...serverState.jumpHorizontalVelocity },
+    };
+    for (const input of inputs.slice(1)) {
+      reconciled = applyPhysics(reconciled, input);
+    }
+
+    // Should match continuous simulation exactly
+    expect(reconciled.position.x).toBeCloseTo(continuous.position.x);
+    expect(reconciled.position.y).toBeCloseTo(continuous.position.y);
+    expect(reconciled.position.z).toBeCloseTo(continuous.position.z);
+    expect(reconciled.jumpHorizontalVelocity).toEqual(continuous.jumpHorizontalVelocity);
+  });
+
+  it('replaying after mid-jump server reset matches continuous simulation', () => {
+    const dt = 1 / 60;
+    const inputs = [
+      makeInput({ seq: 1, dz: 1, jump: true, dt }),
+      makeInput({ seq: 2, dt }),
+      makeInput({ seq: 3, dt }),
+      makeInput({ seq: 4, dx: 1, dt }),
+      makeInput({ seq: 5, dt }),
+    ];
+
+    // Continuous simulation
+    let continuous = makeState();
+    for (const input of inputs) {
+      continuous = applyPhysics(continuous, input);
+    }
+
+    // Server acks through seq 3: take state after inputs 1-3 as server state
+    let serverState = makeState();
+    for (const input of inputs.slice(0, 3)) {
+      serverState = applyPhysics(serverState, input);
+    }
+
+    // Reconcile: reset to server state, replay inputs 4 and 5
+    let reconciled: PhysicsState = {
+      position: { ...serverState.position },
+      velocity: { ...serverState.velocity },
+      isGrounded: serverState.isGrounded,
+      jumpHorizontalVelocity: { ...serverState.jumpHorizontalVelocity },
+    };
+    for (const input of inputs.slice(3)) {
+      reconciled = applyPhysics(reconciled, input);
+    }
+
+    expect(reconciled.position.x).toBeCloseTo(continuous.position.x);
+    expect(reconciled.position.y).toBeCloseTo(continuous.position.y);
+    expect(reconciled.position.z).toBeCloseTo(continuous.position.z);
+  });
 });
