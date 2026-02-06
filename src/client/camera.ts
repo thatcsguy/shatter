@@ -1,39 +1,27 @@
 import * as THREE from 'three';
 import { PLAYER_HEIGHT } from '../shared/types';
+import { InputManager } from './input.js';
+
+const ROTATION_SENSITIVITY = 0.003;
 
 export class CameraController {
   readonly camera: THREE.PerspectiveCamera;
   private yaw = 0;
   private pitch = 0.5;
   private distance = 15;
-  private isDragging = false;
   private target = new THREE.Vector3();
+  private input: InputManager;
 
   get cameraYaw(): number { return this.yaw; }
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, input: InputManager) {
+    this.input = input;
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-    canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 2) {
-        this.isDragging = true;
-      }
-    });
-    window.addEventListener('mouseup', (e) => {
-      if (e.button === 2) {
-        this.isDragging = false;
-      }
-    });
-    canvas.addEventListener('mousemove', (e) => {
-      if (!this.isDragging) return;
-      this.yaw -= e.movementX * 0.003;
-      this.pitch = Math.max(-Math.PI / 4, Math.min(Math.PI / 2, this.pitch + e.movementY * 0.003));
-    });
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       this.distance = Math.max(5, Math.min(30, this.distance + e.deltaY * 0.01));
     }, { passive: false });
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -42,6 +30,14 @@ export class CameraController {
   }
 
   update(targetPos: { x: number; y: number; z: number }): void {
+    // Rotate camera when either mouse button is held
+    if (this.input.isMouseButtonDown(0) || this.input.isMouseButtonDown(2)) {
+      const delta = this.input.getMouseDelta();
+      this.yaw -= delta.x * ROTATION_SENSITIVITY;
+      this.pitch = Math.max(-Math.PI / 4, Math.min(Math.PI / 2, this.pitch + delta.y * ROTATION_SENSITIVITY));
+    }
+    this.input.resetMouseDelta();
+
     this.target.set(targetPos.x, targetPos.y + PLAYER_HEIGHT * 0.75, targetPos.z);
 
     const x = this.target.x + this.distance * Math.sin(this.yaw) * Math.cos(this.pitch);

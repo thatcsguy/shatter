@@ -13,9 +13,9 @@ export class ClientGame {
   private lastTime = 0;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.input = new InputManager();
+    this.input = new InputManager(canvas);
     this.network = new NetworkManager();
-    this.camera = new CameraController(canvas);
+    this.camera = new CameraController(canvas, this.input);
     this.sceneManager = new SceneManager(canvas);
     this.hud = new HUD();
   }
