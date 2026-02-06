@@ -77,7 +77,7 @@ describe('NetworkManager', () => {
 
       nm.sendInput(makeInput({ dz: 1, dt: 1 / 60 }));
 
-      expect(nm.localState!.position.z).toBeCloseTo(before.z + PLAYER_SPEED * (1 / 60));
+      expect(nm.localState!.position.z).toBeCloseTo(before.z - PLAYER_SPEED * (1 / 60));
     });
 
     it('accumulates multiple predicted inputs', () => {
@@ -89,7 +89,7 @@ describe('NetworkManager', () => {
       nm.sendInput(makeInput({ seq: 2, dz: 1, dt }));
       nm.sendInput(makeInput({ seq: 3, dz: 1, dt }));
 
-      expect(nm.localState!.position.z).toBeCloseTo(startZ + PLAYER_SPEED * dt * 3);
+      expect(nm.localState!.position.z).toBeCloseTo(startZ - PLAYER_SPEED * dt * 3);
       expect(nm.pendingCount).toBe(3);
     });
 
@@ -133,7 +133,7 @@ describe('NetworkManager', () => {
       nm.sendInput(makeInput({ seq: 3, dz: 1, dt }));
 
       // Server acknowledges seq 1, with its authoritative position
-      const serverPos = { x: ARENA_SIZE / 2, y: 0, z: ARENA_SIZE / 2 + PLAYER_SPEED * dt };
+      const serverPos = { x: ARENA_SIZE / 2, y: 0, z: ARENA_SIZE / 2 - PLAYER_SPEED * dt };
       const serverState = makePlayerState({
         id: 'local',
         position: serverPos,
@@ -143,7 +143,7 @@ describe('NetworkManager', () => {
 
       // Local state = server position + replay of seq 2 and seq 3
       expect(nm.localState!.position.z).toBeCloseTo(
-        serverPos.z + PLAYER_SPEED * dt * 2
+        serverPos.z - PLAYER_SPEED * dt * 2
       );
     });
 

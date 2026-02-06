@@ -32,19 +32,19 @@ describe('applyPhysics', () => {
     expect(result.position.y).toBe(0);
   });
 
-  it('moves forward (positive Z) with dz=1 and cameraYaw=0', () => {
+  it('moves forward (negative Z, away from camera) with dz=1 and cameraYaw=0', () => {
     const state = makeState();
     const dt = 1 / 60;
     const result = applyPhysics(state, makeInput({ dz: 1, dt }));
-    expect(result.position.z).toBeCloseTo(20 + PLAYER_SPEED * dt);
+    expect(result.position.z).toBeCloseTo(20 - PLAYER_SPEED * dt);
     expect(result.position.x).toBeCloseTo(20);
   });
 
-  it('moves backward with dz=-1', () => {
+  it('moves backward (positive Z, toward camera) with dz=-1', () => {
     const state = makeState();
     const dt = 1 / 60;
     const result = applyPhysics(state, makeInput({ dz: -1, dt }));
-    expect(result.position.z).toBeCloseTo(20 - PLAYER_SPEED * dt);
+    expect(result.position.z).toBeCloseTo(20 + PLAYER_SPEED * dt);
   });
 
   it('moves right with dx=1 and cameraYaw=0', () => {
@@ -71,9 +71,9 @@ describe('applyPhysics', () => {
   it('applies camera-relative movement', () => {
     const state = makeState();
     const dt = 1 / 60;
-    // Camera rotated 90 degrees: forward (dz=1) should now move along X
+    // Camera rotated 90 degrees: forward (dz=1) should now move in -X
     const result = applyPhysics(state, makeInput({ dz: 1, dt, cameraYaw: Math.PI / 2 }));
-    expect(result.position.x).toBeCloseTo(20 + PLAYER_SPEED * dt, 4);
+    expect(result.position.x).toBeCloseTo(20 - PLAYER_SPEED * dt, 4);
     expect(result.position.z).toBeCloseTo(20, 4);
   });
 
@@ -92,17 +92,17 @@ describe('applyPhysics', () => {
     );
     expect(right.position.x).toBe(ARENA_SIZE);
 
-    // Bottom edge
+    // Bottom edge (forward moves in -Z)
     const bottom = applyPhysics(
       makeState({ position: { x: 20, y: 0, z: 0 } }),
-      makeInput({ dz: -1, dt: 1 })
+      makeInput({ dz: 1, dt: 1 })
     );
     expect(bottom.position.z).toBe(0);
 
-    // Top edge
+    // Top edge (backward moves in +Z)
     const top = applyPhysics(
       makeState({ position: { x: 20, y: 0, z: ARENA_SIZE } }),
-      makeInput({ dz: 1, dt: 1 })
+      makeInput({ dz: -1, dt: 1 })
     );
     expect(top.position.z).toBe(ARENA_SIZE);
   });
@@ -154,8 +154,8 @@ describe('applyPhysics', () => {
     const state = makeState();
     const fast = applyPhysics(state, makeInput({ dz: 1, dt: 1 / 30 }));
     const slow = applyPhysics(state, makeInput({ dz: 1, dt: 1 / 60 }));
-    const fastDist = fast.position.z - 20;
-    const slowDist = slow.position.z - 20;
+    const fastDist = 20 - fast.position.z;
+    const slowDist = 20 - slow.position.z;
     expect(fastDist).toBeCloseTo(slowDist * 2, 5);
   });
 });

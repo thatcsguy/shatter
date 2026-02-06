@@ -27,7 +27,7 @@ describe('Player', () => {
     const dt = 1 / 60;
     player.queueInput(makeInput({ dz: 1, dt }));
     player.processInputs();
-    expect(player.position.z).toBeCloseTo(ARENA_SIZE / 2 + PLAYER_SPEED * dt);
+    expect(player.position.z).toBeCloseTo(ARENA_SIZE / 2 - PLAYER_SPEED * dt);
     expect(player.position.x).toBeCloseTo(ARENA_SIZE / 2);
   });
 
@@ -39,7 +39,7 @@ describe('Player', () => {
     player.queueInput(makeInput({ seq: 3, dz: 1, dt }));
     player.processInputs();
 
-    expect(player.position.z).toBeCloseTo(ARENA_SIZE / 2 + PLAYER_SPEED * dt * 3);
+    expect(player.position.z).toBeCloseTo(ARENA_SIZE / 2 - PLAYER_SPEED * dt * 3);
     expect(player.lastProcessedInput).toBe(3);
   });
 

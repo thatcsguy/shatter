@@ -10,12 +10,12 @@ export function applyPhysics(state: PhysicsState, input: PlayerInput): PhysicsSt
   const { dt } = input;
 
   // Compute camera-relative movement direction
+  // Forward = (-sin(yaw), 0, -cos(yaw)), Right = (cos(yaw), 0, -sin(yaw))
   const cosYaw = Math.cos(input.cameraYaw);
   const sinYaw = Math.sin(input.cameraYaw);
 
-  // Forward is -Z in Three.js convention
-  let moveX = input.dx * cosYaw + input.dz * sinYaw;
-  let moveZ = input.dx * -sinYaw + input.dz * cosYaw;
+  let moveX = input.dx * cosYaw + input.dz * -sinYaw;
+  let moveZ = input.dx * -sinYaw + input.dz * -cosYaw;
 
   // Normalize diagonal movement
   const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
