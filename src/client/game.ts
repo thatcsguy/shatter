@@ -34,9 +34,7 @@ export class ClientGame {
     const localState = this.network.localState;
     if (localState) {
       const input = this.input.sample(dt, this.camera.cameraYaw);
-      if (input) {
-        this.network.sendInput(input);
-      }
+      this.network.sendInput(input);
 
       // Update local player mesh
       const localId = this.network.localId!;

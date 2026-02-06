@@ -16,12 +16,10 @@ export class InputManager {
     });
   }
 
-  sample(dt: number, cameraYaw: number): PlayerInput | null {
+  sample(dt: number, cameraYaw: number): PlayerInput {
     const dx = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
     const dz = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
     const jump = this.keys.has('Space');
-
-    if (dx === 0 && dz === 0 && !jump) return null;
 
     return {
       seq: ++this.seq,
