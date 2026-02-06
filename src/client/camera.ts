@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { PLAYER_HEIGHT } from '../shared/types';
 
 export class CameraController {
   readonly camera: THREE.PerspectiveCamera;
@@ -25,8 +26,8 @@ export class CameraController {
     });
     canvas.addEventListener('mousemove', (e) => {
       if (!this.isDragging) return;
-      this.yaw -= e.movementX * 0.005;
-      this.pitch = Math.max(-Math.PI / 4, Math.min(Math.PI / 2, this.pitch + e.movementY * 0.005));
+      this.yaw -= e.movementX * 0.003;
+      this.pitch = Math.max(-Math.PI / 4, Math.min(Math.PI / 2, this.pitch + e.movementY * 0.003));
     });
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
@@ -41,7 +42,7 @@ export class CameraController {
   }
 
   update(targetPos: { x: number; y: number; z: number }): void {
-    this.target.set(targetPos.x, targetPos.y + 2, targetPos.z);
+    this.target.set(targetPos.x, targetPos.y + PLAYER_HEIGHT * 0.75, targetPos.z);
 
     const x = this.target.x + this.distance * Math.sin(this.yaw) * Math.cos(this.pitch);
     const y = Math.max(0.1, this.target.y + this.distance * Math.sin(this.pitch));
