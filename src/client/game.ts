@@ -44,7 +44,7 @@ export class ClientGame {
       mesh.animate(localState.velocity, dt);
 
       // Update camera
-      this.camera.update(localState.position);
+      this.camera.update(localState.position, dt);
     }
 
     // Update other players via interpolation
