@@ -50,7 +50,7 @@ export class HumanoidMesh extends THREE.Group {
     this.add(head, torso, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
   }
 
-  animate(velocity: { x: number; z: number }, dt: number): void {
+  animate(velocity: { x: number; z: number }, dt: number, movementDirection?: { x: number; z: number }): void {
     const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
 
     if (speed > 0.5) {
@@ -60,9 +60,21 @@ export class HumanoidMesh extends THREE.Group {
       this.rightArm.rotation.x = -swing;
       this.leftLeg.rotation.x = -swing;
       this.rightLeg.rotation.x = swing;
+    } else {
+      // Return to idle
+      this.animPhase = 0;
+      this.leftArm.rotation.x *= 0.9;
+      this.rightArm.rotation.x *= 0.9;
+      this.leftLeg.rotation.x *= 0.9;
+      this.rightLeg.rotation.x *= 0.9;
+    }
 
-      // Face movement direction (capped rotation speed: 10 rad/s with clean snap)
-      const targetAngle = Math.atan2(velocity.x, velocity.z);
+    // Face movement direction (capped rotation speed: 10 rad/s with clean snap)
+    // Use movementDirection if provided (allows air rotation), fall back to velocity
+    const facing = movementDirection ?? velocity;
+    const facingSpeed = Math.sqrt(facing.x * facing.x + facing.z * facing.z);
+    if (facingSpeed > 0.01) {
+      const targetAngle = Math.atan2(facing.x, facing.z);
       const diff = targetAngle - this.rotation.y;
       const wrapped = Math.atan2(Math.sin(diff), Math.cos(diff));
       const maxStep = 10 * dt;
@@ -71,13 +83,6 @@ export class HumanoidMesh extends THREE.Group {
       } else {
         this.rotation.y += Math.sign(wrapped) * maxStep;
       }
-    } else {
-      // Return to idle
-      this.animPhase = 0;
-      this.leftArm.rotation.x *= 0.9;
-      this.rightArm.rotation.x *= 0.9;
-      this.leftLeg.rotation.x *= 0.9;
-      this.rightLeg.rotation.x *= 0.9;
     }
   }
 }
