@@ -61,11 +61,16 @@ export class HumanoidMesh extends THREE.Group {
       this.leftLeg.rotation.x = -swing;
       this.rightLeg.rotation.x = swing;
 
-      // Face movement direction
+      // Face movement direction (capped rotation speed: 10 rad/s with clean snap)
       const targetAngle = Math.atan2(velocity.x, velocity.z);
       const diff = targetAngle - this.rotation.y;
       const wrapped = Math.atan2(Math.sin(diff), Math.cos(diff));
-      this.rotation.y += wrapped * Math.min(1, dt * 10);
+      const maxStep = 10 * dt;
+      if (Math.abs(wrapped) <= maxStep) {
+        this.rotation.y = targetAngle;
+      } else {
+        this.rotation.y += Math.sign(wrapped) * maxStep;
+      }
     } else {
       // Return to idle
       this.animPhase = 0;
