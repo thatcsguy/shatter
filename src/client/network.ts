@@ -43,6 +43,7 @@ export class NetworkManager {
           position: { ...me.position },
           velocity: { ...me.velocity },
           isGrounded: me.isGrounded,
+          jumpHorizontalVelocity: { x: 0, y: 0, z: 0 },
         };
       }
       this._playerCount = Object.keys(state.players).length;
@@ -107,6 +108,7 @@ export class NetworkManager {
       position: { ...serverState.position },
       velocity: { ...serverState.velocity },
       isGrounded: serverState.isGrounded,
+      jumpHorizontalVelocity: { x: 0, y: 0, z: 0 },
     };
 
     // Replay unacknowledged inputs

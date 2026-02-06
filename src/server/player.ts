@@ -7,6 +7,7 @@ export class Player {
   position: Vec3;
   velocity: Vec3;
   isGrounded: boolean;
+  jumpHorizontalVelocity: Vec3;
   lastProcessedInput: number;
   private inputQueue: PlayerInput[];
 
@@ -16,6 +17,7 @@ export class Player {
     this.position = { x: ARENA_SIZE / 2, y: 0, z: ARENA_SIZE / 2 };
     this.velocity = { x: 0, y: 0, z: 0 };
     this.isGrounded = true;
+    this.jumpHorizontalVelocity = { x: 0, y: 0, z: 0 };
     this.lastProcessedInput = 0;
     this.inputQueue = [];
   }
@@ -30,12 +32,14 @@ export class Player {
         position: { ...this.position },
         velocity: { ...this.velocity },
         isGrounded: this.isGrounded,
+        jumpHorizontalVelocity: { ...this.jumpHorizontalVelocity },
       };
 
       const result = applyPhysics(state, input);
       this.position = result.position;
       this.velocity = result.velocity;
       this.isGrounded = result.isGrounded;
+      this.jumpHorizontalVelocity = result.jumpHorizontalVelocity;
       this.lastProcessedInput = input.seq;
     }
     this.inputQueue = [];

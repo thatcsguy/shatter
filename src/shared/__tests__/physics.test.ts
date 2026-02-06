@@ -7,6 +7,7 @@ function makeState(overrides: Partial<PhysicsState> = {}): PhysicsState {
     position: { x: 20, y: 0, z: 20 },
     velocity: { x: 0, y: 0, z: 0 },
     isGrounded: true,
+    jumpHorizontalVelocity: { x: 0, y: 0, z: 0 },
     ...overrides,
   };
 }
@@ -148,6 +149,66 @@ describe('applyPhysics', () => {
     expect(result.position.y).toBe(0);
     expect(result.velocity.y).toBe(0);
     expect(result.isGrounded).toBe(true);
+  });
+
+  it('snapshots horizontal velocity at jump start', () => {
+    const state = makeState();
+    const dt = 1 / 60;
+    // Jump while moving forward
+    const result = applyPhysics(state, makeInput({ dz: 1, jump: true, dt }));
+    expect(result.jumpHorizontalVelocity.z).toBeCloseTo(-PLAYER_SPEED);
+    expect(result.isGrounded).toBe(false);
+  });
+
+  it('preserves horizontal momentum mid-air from snapshot', () => {
+    const state = makeState();
+    const dt = 1 / 60;
+    // Jump while moving forward
+    const jumped = applyPhysics(state, makeInput({ dz: 1, jump: true, dt }));
+    const zAfterJump = jumped.position.z;
+
+    // Next frame: no input, but should still move forward from snapshot
+    const airborne = applyPhysics(jumped, makeInput({ dt }));
+    expect(airborne.position.z).toBeCloseTo(zAfterJump - PLAYER_SPEED * dt);
+  });
+
+  it('ignores new directional input while airborne', () => {
+    const state = makeState();
+    const dt = 1 / 60;
+    // Jump while moving forward
+    const jumped = applyPhysics(state, makeInput({ dz: 1, jump: true, dt }));
+
+    // Try to move right mid-air — should be ignored
+    const airborne = applyPhysics(jumped, makeInput({ dx: 1, dz: 0, dt }));
+    // Should still move in original jump direction (forward = -Z), not right (+X)
+    expect(airborne.velocity.z).toBeCloseTo(-PLAYER_SPEED);
+    expect(airborne.velocity.x).toBeCloseTo(0);
+  });
+
+  it('clears jump horizontal velocity on landing', () => {
+    const falling = makeState({
+      position: { x: 20, y: 0.01, z: 20 },
+      velocity: { x: 0, y: -5, z: 0 },
+      isGrounded: false,
+      jumpHorizontalVelocity: { x: PLAYER_SPEED, y: 0, z: 0 },
+    });
+    const result = applyPhysics(falling, makeInput({ dt: 1 / 60 }));
+    expect(result.isGrounded).toBe(true);
+    expect(result.jumpHorizontalVelocity).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('standing jump with no input has zero horizontal velocity', () => {
+    const state = makeState();
+    const dt = 1 / 60;
+    // Jump with no directional input
+    const jumped = applyPhysics(state, makeInput({ jump: true, dt }));
+    expect(jumped.jumpHorizontalVelocity.x).toBeCloseTo(0);
+    expect(jumped.jumpHorizontalVelocity.z).toBeCloseTo(0);
+
+    // Should not move horizontally while airborne
+    const airborne = applyPhysics(jumped, makeInput({ dt }));
+    expect(airborne.position.x).toBeCloseTo(20);
+    expect(airborne.position.z).toBeCloseTo(20);
   });
 
   it('scales movement with delta time', () => {

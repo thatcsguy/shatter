@@ -4,6 +4,7 @@ export interface PhysicsState {
   position: Vec3;
   velocity: Vec3;
   isGrounded: boolean;
+  jumpHorizontalVelocity: Vec3;
 }
 
 export function applyPhysics(state: PhysicsState, input: PlayerInput): PhysicsState {
@@ -24,23 +25,31 @@ export function applyPhysics(state: PhysicsState, input: PlayerInput): PhysicsSt
     moveZ /= len;
   }
 
-  // Horizontal position
-  const newX = state.position.x + moveX * PLAYER_SPEED * dt;
-  const newZ = state.position.z + moveZ * PLAYER_SPEED * dt;
+  const inputVelX = moveX * PLAYER_SPEED;
+  const inputVelZ = moveZ * PLAYER_SPEED;
 
   // Vertical physics
   let newVelY = state.velocity.y;
   let newGrounded = state.isGrounded;
+  let jumpHVel = { ...state.jumpHorizontalVelocity };
 
   if (input.jump && state.isGrounded) {
     newVelY = JUMP_VELOCITY;
     newGrounded = false;
+    // Snapshot horizontal velocity at jump start
+    jumpHVel = { x: inputVelX, y: 0, z: inputVelZ };
   }
 
   if (!newGrounded) {
     newVelY += GRAVITY * dt;
   }
 
+  // Use snapshotted velocity while airborne, input velocity while grounded
+  const hVelX = newGrounded ? inputVelX : jumpHVel.x;
+  const hVelZ = newGrounded ? inputVelZ : jumpHVel.z;
+
+  const newX = state.position.x + hVelX * dt;
+  const newZ = state.position.z + hVelZ * dt;
   let newY = state.position.y + newVelY * dt;
 
   // Landing detection
@@ -48,6 +57,7 @@ export function applyPhysics(state: PhysicsState, input: PlayerInput): PhysicsSt
     newY = 0;
     newVelY = 0;
     newGrounded = true;
+    jumpHVel = { x: 0, y: 0, z: 0 };
   }
 
   return {
@@ -57,11 +67,12 @@ export function applyPhysics(state: PhysicsState, input: PlayerInput): PhysicsSt
       z: clamp(newZ, 0, ARENA_SIZE),
     },
     velocity: {
-      x: moveX * PLAYER_SPEED,
+      x: hVelX,
       y: newVelY,
-      z: moveZ * PLAYER_SPEED,
+      z: hVelZ,
     },
     isGrounded: newGrounded,
+    jumpHorizontalVelocity: jumpHVel,
   };
 }
 
