@@ -3,9 +3,9 @@ export const ARENA_SIZE = 40;
 export const MAX_PLAYERS = 4;
 export const SERVER_TICK_RATE = 60;
 export const BROADCAST_RATE = 20;
-export const PLAYER_SPEED = 8;
-export const JUMP_VELOCITY = 10;
-export const GRAVITY = -25;
+export const PLAYER_SPEED = 5;
+export const JUMP_VELOCITY = 8;
+export const GRAVITY = -20;
 export const INTERPOLATION_BUFFER_SIZE = 20;
 export const INTERPOLATION_DELAY_MS = 100;
 
