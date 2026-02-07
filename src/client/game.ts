@@ -22,7 +22,6 @@ export class ClientGame {
     this.camera = new CameraController(canvas, this.input);
     this.sceneManager = new SceneManager(canvas);
     this.hud = new HUD(
-      () => this.network.spawnKnockback(),
       (name) => this.network.runScript(name),
     );
     this.colorPicker = new ColorPicker();

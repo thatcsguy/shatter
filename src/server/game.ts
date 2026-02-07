@@ -1,12 +1,10 @@
 import { Server } from 'socket.io';
 import { Player } from './player.js';
 import { MechanicManager } from './mechanics/mechanicManager.js';
-import { RadialKnockbackMechanic } from './mechanics/radialKnockback.js';
 import {
   GameState,
   PlayerInput,
   PLAYER_COLORS,
-  ARENA_SIZE,
   MAX_PLAYERS,
   SERVER_TICK_RATE,
   BROADCAST_RATE,
@@ -75,12 +73,6 @@ export class Game {
         this.colorAssignments.set(color, socket.id);
 
         this.io.emit('player:colorChanged', { id: socket.id, color });
-      });
-
-      socket.on('admin:spawnKnockback', () => {
-        const x = Math.random() * ARENA_SIZE;
-        const z = Math.random() * ARENA_SIZE;
-        this.mechanicManager.add(new RadialKnockbackMechanic(x, z, Date.now()));
       });
 
       socket.on('admin:runScript', ({ name }) => {

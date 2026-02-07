@@ -5,7 +5,7 @@ export class HUD {
   private debugInfoEl: HTMLDivElement;
   private debugVisible = false;
 
-  constructor(onSpawnKnockback?: () => void, onRunScript?: (name: string) => void) {
+  constructor(onRunScript?: (name: string) => void) {
     this.container = document.createElement('div');
     this.container.style.cssText = 'position:fixed;top:10px;left:10px;font-family:monospace;color:#fff;text-shadow:1px 1px 2px #000;z-index:100;';
     document.body.appendChild(this.container);
@@ -21,21 +21,10 @@ export class HUD {
     this.debugInfoEl = document.createElement('div');
     this.debugEl.appendChild(this.debugInfoEl);
 
-    if (onSpawnKnockback) {
-      const btn = document.createElement('button');
-      btn.textContent = 'Knockback';
-      btn.style.cssText = 'margin-top:8px;padding:4px 8px;font-family:monospace;font-size:12px;cursor:pointer;';
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onSpawnKnockback();
-      });
-      this.debugEl.appendChild(btn);
-    }
-
     if (onRunScript) {
       const btn = document.createElement('button');
       btn.textContent = 'Knockfest';
-      btn.style.cssText = 'margin-top:8px;margin-left:4px;padding:4px 8px;font-family:monospace;font-size:12px;cursor:pointer;';
+      btn.style.cssText = 'margin-top:8px;padding:4px 8px;font-family:monospace;font-size:12px;cursor:pointer;';
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         onRunScript('knockfest');

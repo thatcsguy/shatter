@@ -239,10 +239,6 @@ export class NetworkManager {
     this.socket.emit('player:colorChange', { color });
   }
 
-  spawnKnockback(): void {
-    this.socket.emit('admin:spawnKnockback');
-  }
-
   runScript(name: string): void {
     this.socket.emit('admin:runScript', { name });
   }
