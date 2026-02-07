@@ -243,6 +243,10 @@ export class NetworkManager {
     this.socket.emit('admin:spawnKnockback');
   }
 
+  runScript(name: string): void {
+    this.socket.emit('admin:runScript', { name });
+  }
+
   getTakenColors(): Map<number, string> {
     const taken = new Map<number, string>();
     if (!this.latestState) return taken;

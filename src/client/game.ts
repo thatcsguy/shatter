@@ -21,7 +21,10 @@ export class ClientGame {
     this.network = new NetworkManager();
     this.camera = new CameraController(canvas, this.input);
     this.sceneManager = new SceneManager(canvas);
-    this.hud = new HUD(() => this.network.spawnKnockback());
+    this.hud = new HUD(
+      () => this.network.spawnKnockback(),
+      (name) => this.network.runScript(name),
+    );
     this.colorPicker = new ColorPicker();
     this.mechanicRenderer = new MechanicRenderer(this.sceneManager.scene);
     this.colorPicker.setOnColorSelect((color) => {

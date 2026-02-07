@@ -13,13 +13,20 @@ import {
   ServerToClientEvents,
   ClientToServerEvents,
 } from '../shared/types.js';
+import { runEncounter, type Script, type ScriptContext } from './scripts/scriptRunner.js';
+import { DefaultMechanicFactory } from './scripts/mechanicFactory.js';
+import { knockfestScript } from './scripts/knockfest.js';
 
 export class Game {
   private players = new Map<string, Player>();
   private colorAssignments = new Map<number, string>(); // color -> playerId
   private mechanicManager = new MechanicManager();
+  private mechanicFactory = new DefaultMechanicFactory();
   private tickInterval: ReturnType<typeof setInterval> | null = null;
   private broadcastInterval: ReturnType<typeof setInterval> | null = null;
+  private scripts: Record<string, Script> = {
+    knockfest: knockfestScript,
+  };
 
   constructor(private io: Server<ClientToServerEvents, ServerToClientEvents>) {}
 
@@ -74,6 +81,15 @@ export class Game {
         const x = Math.random() * ARENA_SIZE;
         const z = Math.random() * ARENA_SIZE;
         this.mechanicManager.add(new RadialKnockbackMechanic(x, z, Date.now()));
+      });
+
+      socket.on('admin:runScript', ({ name }) => {
+        const script = this.scripts[name];
+        if (!script) return;
+        const ctx: ScriptContext = {
+          getPlayers: () => Array.from(this.players.values()),
+        };
+        runEncounter(this.mechanicManager, this.mechanicFactory, ctx, script);
       });
 
       socket.on('disconnect', () => {

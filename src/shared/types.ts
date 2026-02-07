@@ -81,4 +81,5 @@ export interface ClientToServerEvents {
   'game:join': () => void;
   'player:colorChange': (data: { color: number }) => void;
   'admin:spawnKnockback': () => void;
+  'admin:runScript': (data: { name: string }) => void;
 }
