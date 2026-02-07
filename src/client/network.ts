@@ -10,7 +10,7 @@ import {
   ServerToClientEvents,
   ClientToServerEvents,
 } from '../shared/types.js';
-import { applyPhysics, PhysicsState, normalizeAngle } from '../shared/physics.js';
+import { applyPhysics, applyVerticalPhysics, PhysicsState, normalizeAngle } from '../shared/physics.js';
 import { KnockbackState, getKnockbackPosition } from '../shared/knockback.js';
 
 interface Snapshot {
@@ -105,7 +105,7 @@ export class NetworkManager {
   sendInput(input: PlayerInput): void {
     if (!this._localState) return;
 
-    // During knockback, update position from knockback physics instead of input
+    // During knockback, update XZ from knockback physics, but continue vertical physics
     if (this._localKnockback) {
       const kb = getKnockbackPosition(this._localKnockback, Date.now());
       this._localState.position.x = kb.x;
@@ -114,7 +114,20 @@ export class NetworkManager {
         this._localKnockback = null;
         this._localState.velocity = { x: 0, y: this._localState.velocity.y, z: 0 };
       }
-      // Still send input for seq tracking, but don't predict movement
+      // Apply vertical physics (gravity/landing) during knockback
+      const vert = applyVerticalPhysics(
+        this._localState.position,
+        this._localState.velocity,
+        this._localState.isGrounded,
+        input.dt,
+      );
+      this._localState.position = vert.position;
+      this._localState.velocity = vert.velocity;
+      this._localState.isGrounded = vert.isGrounded;
+      if (this._localState.isGrounded) {
+        this._localState.jumpHorizontalVelocity = { x: 0, y: 0, z: 0 };
+      }
+      // Still send input for seq tracking, but don't predict horizontal movement
       this.pendingInputs.push({
         ...input,
         predictedPosition: { ...this._localState.position },

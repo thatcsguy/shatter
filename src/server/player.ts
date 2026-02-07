@@ -1,5 +1,5 @@
 import { PlayerInput, PlayerState, Vec3, ARENA_SIZE } from '../shared/types.js';
-import { applyPhysics, PhysicsState } from '../shared/physics.js';
+import { applyPhysics, applyVerticalPhysics, PhysicsState } from '../shared/physics.js';
 import { KnockbackState, calculateKnockbackEndpoint, getKnockbackPosition } from '../shared/knockback.js';
 
 export class Player {
@@ -47,7 +47,14 @@ export class Player {
 
     for (const input of this.inputQueue) {
       if (this.knockback) {
-        // During knockback, skip movement but still ack input
+        // During knockback, skip horizontal movement but apply vertical physics
+        const vert = applyVerticalPhysics(this.position, this.velocity, this.isGrounded, input.dt);
+        this.position = vert.position;
+        this.velocity = vert.velocity;
+        this.isGrounded = vert.isGrounded;
+        if (this.isGrounded) {
+          this.jumpHorizontalVelocity = { x: 0, y: 0, z: 0 };
+        }
         this.lastProcessedInput = input.seq;
         continue;
       }

@@ -105,6 +105,34 @@ export function applyPhysics(state: PhysicsState, input: PlayerInput): PhysicsSt
   };
 }
 
+export function applyVerticalPhysics(
+  position: Vec3,
+  velocity: Vec3,
+  isGrounded: boolean,
+  dt: number,
+): { position: Vec3; velocity: Vec3; isGrounded: boolean } {
+  let newVelY = velocity.y;
+  let newGrounded = isGrounded;
+
+  if (!newGrounded) {
+    newVelY += GRAVITY * dt;
+  }
+
+  let newY = position.y + newVelY * dt;
+
+  if (newY <= 0) {
+    newY = 0;
+    newVelY = 0;
+    newGrounded = true;
+  }
+
+  return {
+    position: { ...position, y: newY },
+    velocity: { ...velocity, y: newVelY },
+    isGrounded: newGrounded,
+  };
+}
+
 function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
