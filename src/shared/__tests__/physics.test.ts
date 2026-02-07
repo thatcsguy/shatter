@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyPhysics, PhysicsState } from '../physics.js';
+import { applyPhysics, PhysicsState, normalizeAngle } from '../physics.js';
 import { PlayerInput, ARENA_SIZE, PLAYER_SPEED, JUMP_VELOCITY, GRAVITY } from '../types.js';
 
 function makeState(overrides: Partial<PhysicsState> = {}): PhysicsState {
@@ -8,6 +8,8 @@ function makeState(overrides: Partial<PhysicsState> = {}): PhysicsState {
     velocity: { x: 0, y: 0, z: 0 },
     isGrounded: true,
     jumpHorizontalVelocity: { x: 0, y: 0, z: 0 },
+    rotation: 0,
+    targetRotation: 0,
     ...overrides,
   };
 }
@@ -243,6 +245,8 @@ describe('applyPhysics', () => {
       velocity: { ...serverState.velocity },
       isGrounded: serverState.isGrounded,
       jumpHorizontalVelocity: { ...serverState.jumpHorizontalVelocity },
+      rotation: serverState.rotation,
+      targetRotation: serverState.targetRotation,
     };
     for (const input of inputs.slice(1)) {
       reconciled = applyPhysics(reconciled, input);
@@ -253,6 +257,8 @@ describe('applyPhysics', () => {
     expect(reconciled.position.y).toBeCloseTo(continuous.position.y);
     expect(reconciled.position.z).toBeCloseTo(continuous.position.z);
     expect(reconciled.jumpHorizontalVelocity).toEqual(continuous.jumpHorizontalVelocity);
+    expect(reconciled.rotation).toBeCloseTo(continuous.rotation);
+    expect(reconciled.targetRotation).toBeCloseTo(continuous.targetRotation);
   });
 
   it('replaying after mid-jump server reset matches continuous simulation', () => {
@@ -283,6 +289,8 @@ describe('applyPhysics', () => {
       velocity: { ...serverState.velocity },
       isGrounded: serverState.isGrounded,
       jumpHorizontalVelocity: { ...serverState.jumpHorizontalVelocity },
+      rotation: serverState.rotation,
+      targetRotation: serverState.targetRotation,
     };
     for (const input of inputs.slice(3)) {
       reconciled = applyPhysics(reconciled, input);
@@ -291,5 +299,88 @@ describe('applyPhysics', () => {
     expect(reconciled.position.x).toBeCloseTo(continuous.position.x);
     expect(reconciled.position.y).toBeCloseTo(continuous.position.y);
     expect(reconciled.position.z).toBeCloseTo(continuous.position.z);
+  });
+
+  // --- Rotation ---
+
+  it('sets targetRotation from movement input', () => {
+    const state = makeState();
+    // Moving right (dx=1, cameraYaw=0) → moveX = cos(0)*1 = 1, moveZ = -sin(0)*1 = 0
+    // targetRotation = atan2(1, 0) = PI/2
+    const result = applyPhysics(state, makeInput({ dx: 1, dt: 1 / 60 }));
+    expect(result.targetRotation).toBeCloseTo(Math.PI / 2);
+  });
+
+  it('steps rotation toward targetRotation', () => {
+    // Start facing forward (rotation=0), target is PI/2 (right)
+    const state = makeState({ rotation: 0, targetRotation: Math.PI / 2 });
+    const dt = 1 / 60;
+    const result = applyPhysics(state, makeInput({ dx: 1, dt }));
+    // Should have moved toward PI/2 but not arrived (ROTATION_SPEED * dt = 10/60 ≈ 0.167)
+    expect(result.rotation).toBeGreaterThan(0);
+    expect(result.rotation).toBeLessThan(Math.PI / 2);
+  });
+
+  it('completes turn after input stops', () => {
+    const state = makeState();
+    const dt = 1 / 60;
+    // Start turning right
+    let s = applyPhysics(state, makeInput({ dx: 1, dt }));
+    // Now release input — targetRotation should persist, rotation should keep stepping
+    for (let i = 0; i < 60; i++) {
+      s = applyPhysics(s, makeInput({ dt }));
+    }
+    expect(s.rotation).toBeCloseTo(s.targetRotation);
+  });
+
+  it('wraps rotation at PI boundary via shortest arc', () => {
+    // Facing just below PI, target just above -PI (which is just past PI going clockwise)
+    // diff = normalizeAngle(-(PI-0.05) - (PI-0.05)) = normalizeAngle(-2PI+0.1) = normalizeAngle(0.1) = 0.1
+    // So rotation should increase by 0.1 (crossing PI), ending near -PI
+    const s = makeState({ rotation: Math.PI - 0.05, targetRotation: -(Math.PI - 0.05) });
+    const dt = 1 / 60;
+    const result = applyPhysics(s, makeInput({ dt }));
+    // The rotation should cross PI and wrap to the -PI side
+    // maxStep = 10 * 1/60 ≈ 0.167, diff = 0.1, so |diff| < maxStep → snaps to target
+    expect(result.rotation).toBeCloseTo(-(Math.PI - 0.05));
+  });
+
+  it('normalizeAngle keeps values in (-PI, PI]', () => {
+    expect(normalizeAngle(0)).toBe(0);
+    expect(normalizeAngle(Math.PI)).toBeCloseTo(Math.PI);
+    expect(normalizeAngle(-Math.PI)).toBeCloseTo(Math.PI); // -PI normalizes to PI
+    expect(normalizeAngle(3 * Math.PI)).toBeCloseTo(Math.PI);
+    expect(normalizeAngle(-3 * Math.PI)).toBeCloseTo(Math.PI);
+  });
+
+  it('round-trips rotation through reconciliation', () => {
+    const dt = 1 / 60;
+    const inputs = [
+      makeInput({ seq: 1, dx: 1, dt }),
+      makeInput({ seq: 2, dx: 1, dt }),
+      makeInput({ seq: 3, dt }), // release — should continue turning
+    ];
+
+    let continuous = makeState();
+    for (const input of inputs) {
+      continuous = applyPhysics(continuous, input);
+    }
+
+    const serverState = applyPhysics(makeState(), inputs[0]);
+
+    let reconciled: PhysicsState = {
+      position: { ...serverState.position },
+      velocity: { ...serverState.velocity },
+      isGrounded: serverState.isGrounded,
+      jumpHorizontalVelocity: { ...serverState.jumpHorizontalVelocity },
+      rotation: serverState.rotation,
+      targetRotation: serverState.targetRotation,
+    };
+    for (const input of inputs.slice(1)) {
+      reconciled = applyPhysics(reconciled, input);
+    }
+
+    expect(reconciled.rotation).toBeCloseTo(continuous.rotation);
+    expect(reconciled.targetRotation).toBeCloseTo(continuous.targetRotation);
   });
 });

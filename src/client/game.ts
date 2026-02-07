@@ -41,15 +41,8 @@ export class ClientGame {
       const localColor = this.network.getPlayerColor(localId);
       const mesh = this.sceneManager.getOrCreatePlayer(localId, localColor);
       mesh.position.set(localState.position.x, localState.position.y, localState.position.z);
-
-      // Compute camera-relative movement direction for rotation (enables air rotation)
-      const cosYaw = Math.cos(input.cameraYaw);
-      const sinYaw = Math.sin(input.cameraYaw);
-      let mdx = input.dx * cosYaw + input.dz * -sinYaw;
-      let mdz = input.dx * -sinYaw + input.dz * -cosYaw;
-      const mdLen = Math.sqrt(mdx * mdx + mdz * mdz);
-      if (mdLen > 1) { mdx /= mdLen; mdz /= mdLen; }
-      mesh.animate(localState.velocity, dt, { x: mdx, z: mdz });
+      mesh.rotation.y = localState.rotation;
+      mesh.animate(localState.velocity, dt);
 
       // Update camera
       this.camera.update(localState.position, dt);
@@ -62,6 +55,7 @@ export class ClientGame {
       if (state) {
         const mesh = this.sceneManager.getOrCreatePlayer(id, state.color);
         mesh.position.set(state.position.x, state.position.y, state.position.z);
+        mesh.rotation.y = state.rotation;
         mesh.animate(state.velocity ?? { x: 0, z: 0 }, dt);
       }
     }

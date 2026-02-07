@@ -9,16 +9,21 @@ import {
   ServerToClientEvents,
   ClientToServerEvents,
 } from '../shared/types.js';
-import { applyPhysics, PhysicsState } from '../shared/physics.js';
+import { applyPhysics, PhysicsState, normalizeAngle } from '../shared/physics.js';
 
 interface Snapshot {
   timestamp: number;
   state: PlayerState;
 }
 
+export function lerpAngle(a: number, b: number, t: number): number {
+  const diff = normalizeAngle(b - a);
+  return normalizeAngle(a + diff * t);
+}
+
 export class NetworkManager {
   private socket: Socket<ServerToClientEvents, ClientToServerEvents>;
-  private pendingInputs: (PlayerInput & { predictedPosition: Vec3 })[] = [];
+  private pendingInputs: (PlayerInput & { predictedPosition: Vec3; predictedRotation: number })[] = [];
   private interpolationBuffers = new Map<string, Snapshot[]>();
   private latestState: GameState | null = null;
   private _localId: string | null = null;
@@ -44,6 +49,8 @@ export class NetworkManager {
           velocity: { ...me.velocity },
           isGrounded: me.isGrounded,
           jumpHorizontalVelocity: { ...me.jumpHorizontalVelocity },
+          rotation: me.rotation,
+          targetRotation: me.targetRotation,
         };
       }
       this._playerCount = Object.keys(state.players).length;
@@ -92,6 +99,7 @@ export class NetworkManager {
     this.pendingInputs.push({
       ...input,
       predictedPosition: { ...predicted.position },
+      predictedRotation: predicted.rotation,
     });
 
     this.socket.emit('game:input', input);
@@ -109,6 +117,8 @@ export class NetworkManager {
       velocity: { ...serverState.velocity },
       isGrounded: serverState.isGrounded,
       jumpHorizontalVelocity: { ...serverState.jumpHorizontalVelocity },
+      rotation: serverState.rotation,
+      targetRotation: serverState.targetRotation,
     };
 
     // Replay unacknowledged inputs
@@ -147,6 +157,7 @@ export class NetworkManager {
         y: a.state.position.y + (b.state.position.y - a.state.position.y) * clamped,
         z: a.state.position.z + (b.state.position.z - a.state.position.z) * clamped,
       },
+      rotation: lerpAngle(a.state.rotation, b.state.rotation, clamped),
     };
   }
 

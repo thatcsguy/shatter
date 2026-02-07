@@ -34,6 +34,8 @@ export interface PlayerState {
   velocity: Vec3;
   isGrounded: boolean;
   jumpHorizontalVelocity: Vec3;
+  rotation: number;
+  targetRotation: number;
   lastProcessedInput: number;
   color: number;
 }

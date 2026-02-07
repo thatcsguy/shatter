@@ -5,6 +5,17 @@ export interface PhysicsState {
   velocity: Vec3;
   isGrounded: boolean;
   jumpHorizontalVelocity: Vec3;
+  rotation: number;
+  targetRotation: number;
+}
+
+const ROTATION_SPEED = 10;
+
+export function normalizeAngle(a: number): number {
+  let r = a % (2 * Math.PI);
+  if (r > Math.PI) r -= 2 * Math.PI;
+  if (r <= -Math.PI) r += 2 * Math.PI;
+  return r;
 }
 
 export function applyPhysics(state: PhysicsState, input: PlayerInput): PhysicsState {
@@ -60,6 +71,22 @@ export function applyPhysics(state: PhysicsState, input: PlayerInput): PhysicsSt
     jumpHVel = { x: 0, y: 0, z: 0 };
   }
 
+  // Rotation
+  const moveLen = Math.sqrt(moveX * moveX + moveZ * moveZ);
+  let newTargetRotation = state.targetRotation;
+  if (moveLen > 0.01) {
+    newTargetRotation = Math.atan2(moveX, moveZ);
+  }
+  const diff = normalizeAngle(newTargetRotation - state.rotation);
+  const maxStep = ROTATION_SPEED * dt;
+  let newRotation: number;
+  if (Math.abs(diff) <= maxStep) {
+    newRotation = newTargetRotation;
+  } else {
+    newRotation = state.rotation + Math.sign(diff) * maxStep;
+  }
+  newRotation = normalizeAngle(newRotation);
+
   return {
     position: {
       x: clamp(newX, 0, ARENA_SIZE),
@@ -73,6 +100,8 @@ export function applyPhysics(state: PhysicsState, input: PlayerInput): PhysicsSt
     },
     isGrounded: newGrounded,
     jumpHorizontalVelocity: jumpHVel,
+    rotation: newRotation,
+    targetRotation: newTargetRotation,
   };
 }
 

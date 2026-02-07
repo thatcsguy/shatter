@@ -1,13 +1,11 @@
 import * as THREE from 'three';
 
-// Shared animate logic: limb swing + facing rotation
+// Shared animate logic: limb swing
 function animateCharacter(
-  group: THREE.Group,
   limbs: { leftArm: THREE.Group; rightArm: THREE.Group; leftLeg: THREE.Group; rightLeg: THREE.Group },
   phase: { value: number },
   velocity: { x: number; z: number },
   dt: number,
-  movementDirection?: { x: number; z: number },
 ): void {
   const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
 
@@ -24,20 +22,6 @@ function animateCharacter(
     limbs.rightArm.rotation.x *= 0.9;
     limbs.leftLeg.rotation.x *= 0.9;
     limbs.rightLeg.rotation.x *= 0.9;
-  }
-
-  const facing = movementDirection ?? velocity;
-  const facingSpeed = Math.sqrt(facing.x * facing.x + facing.z * facing.z);
-  if (facingSpeed > 0.01) {
-    const targetAngle = Math.atan2(facing.x, facing.z);
-    const diff = targetAngle - group.rotation.y;
-    const wrapped = Math.atan2(Math.sin(diff), Math.cos(diff));
-    const maxStep = 10 * dt;
-    if (Math.abs(wrapped) <= maxStep) {
-      group.rotation.y = targetAngle;
-    } else {
-      group.rotation.y += Math.sign(wrapped) * maxStep;
-    }
   }
 }
 
@@ -145,10 +129,10 @@ export class CharacterMesh extends THREE.Group {
     this.add(this.leftLegPivot, this.rightLegPivot);
   }
 
-  animate(velocity: { x: number; z: number }, dt: number, movementDirection?: { x: number; z: number }): void {
-    animateCharacter(this, {
+  animate(velocity: { x: number; z: number }, dt: number): void {
+    animateCharacter({
       leftArm: this.leftArmPivot, rightArm: this.rightArmPivot,
       leftLeg: this.leftLegPivot, rightLeg: this.rightLegPivot,
-    }, this.animPhase, velocity, dt, movementDirection);
+    }, this.animPhase, velocity, dt);
   }
 }

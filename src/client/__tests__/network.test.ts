@@ -24,7 +24,7 @@ vi.mock('socket.io-client', () => ({
   io: () => mockSocket,
 }));
 
-import { NetworkManager } from '../network.js';
+import { NetworkManager, lerpAngle } from '../network.js';
 import { applyPhysics } from '../../shared/physics.js';
 
 // --- Helpers ---
@@ -48,6 +48,8 @@ function makePlayerState(overrides: Partial<PlayerState> = {}): PlayerState {
     velocity: { x: 0, y: 0, z: 0 },
     isGrounded: true,
     jumpHorizontalVelocity: { x: 0, y: 0, z: 0 },
+    rotation: 0,
+    targetRotation: 0,
     lastProcessedInput: 0,
     color: 0x4a90d9,
     ...overrides,
@@ -384,6 +386,90 @@ describe('NetworkManager', () => {
       const other = makePlayerState({ id: 'other' });
       handlers['game:state'](makeGameState({ local, other }, 1000));
       expect(nm.playerCount).toBe(2);
+    });
+  });
+
+  // --- Rotation ---
+
+  describe('rotation', () => {
+    it('prediction includes rotation', () => {
+      joinGame(nm);
+      expect(nm.localState!.rotation).toBe(0);
+
+      nm.sendInput(makeInput({ dx: 1, dt: 1 / 60 }));
+      // Moving right → rotation should have stepped toward PI/2
+      expect(nm.localState!.rotation).toBeGreaterThan(0);
+      expect(nm.localState!.targetRotation).toBeCloseTo(Math.PI / 2);
+    });
+
+    it('reconciliation preserves rotation', () => {
+      joinGame(nm);
+      const dt = 1 / 60;
+
+      nm.sendInput(makeInput({ seq: 1, dx: 1, dt }));
+      nm.sendInput(makeInput({ seq: 2, dx: 1, dt }));
+
+      const serverPhysics = applyPhysics(
+        {
+          position: { x: ARENA_SIZE / 2, y: 0, z: ARENA_SIZE / 2 },
+          velocity: { x: 0, y: 0, z: 0 },
+          isGrounded: true,
+          jumpHorizontalVelocity: { x: 0, y: 0, z: 0 },
+          rotation: 0,
+          targetRotation: 0,
+        },
+        makeInput({ seq: 1, dx: 1, dt }),
+      );
+
+      const serverState = makePlayerState({
+        id: 'local',
+        position: { ...serverPhysics.position },
+        velocity: { ...serverPhysics.velocity },
+        rotation: serverPhysics.rotation,
+        targetRotation: serverPhysics.targetRotation,
+        lastProcessedInput: 1,
+      });
+      handlers['game:state'](makeGameState({ local: serverState }));
+
+      // After reconciliation + replay of seq 2, rotation should match pure prediction
+      expect(nm.localState!.rotation).toBeGreaterThan(serverPhysics.rotation);
+      expect(nm.localState!.targetRotation).toBeCloseTo(Math.PI / 2);
+    });
+
+    it('angular interpolation works', () => {
+      // lerpAngle should interpolate linearly
+      expect(lerpAngle(0, Math.PI / 2, 0.5)).toBeCloseTo(Math.PI / 4);
+      expect(lerpAngle(0, Math.PI / 2, 0)).toBeCloseTo(0);
+      expect(lerpAngle(0, Math.PI / 2, 1)).toBeCloseTo(Math.PI / 2);
+    });
+
+    it('interpolation takes shortest arc across PI boundary', () => {
+      // From just below PI to just above -PI → shortest path crosses PI
+      const a = Math.PI - 0.1;
+      const b = -(Math.PI - 0.1);
+      const mid = lerpAngle(a, b, 0.5);
+      // Shortest arc goes through PI, so midpoint should be near PI (or -PI)
+      expect(Math.abs(mid)).toBeCloseTo(Math.PI, 1);
+    });
+
+    it('interpolates rotation for other players', () => {
+      joinGame(nm);
+
+      const local = makePlayerState({ id: 'local' });
+      const otherA = makePlayerState({ id: 'other', position: { x: 5, y: 0, z: 5 }, rotation: 0 });
+      const otherB = makePlayerState({ id: 'other', position: { x: 10, y: 0, z: 10 }, rotation: Math.PI / 2 });
+
+      handlers['game:state'](makeGameState({ local, other: otherA }, 1000));
+      handlers['game:state'](makeGameState({ local, other: otherB }, 1050));
+
+      // renderTime at midpoint
+      vi.spyOn(Date, 'now').mockReturnValue(1025 + 100);
+
+      const result = nm.getInterpolatedState('other');
+      expect(result).not.toBeNull();
+      expect(result!.rotation).toBeCloseTo(Math.PI / 4);
+
+      vi.restoreAllMocks();
     });
   });
 });
