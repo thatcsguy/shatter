@@ -1,9 +1,12 @@
 import { Server } from 'socket.io';
 import { Player } from './player.js';
+import { MechanicManager } from './mechanics/mechanicManager.js';
+import { RadialKnockbackMechanic } from './mechanics/radialKnockback.js';
 import {
   GameState,
   PlayerInput,
   PLAYER_COLORS,
+  ARENA_SIZE,
   MAX_PLAYERS,
   SERVER_TICK_RATE,
   BROADCAST_RATE,
@@ -14,6 +17,7 @@ import {
 export class Game {
   private players = new Map<string, Player>();
   private colorAssignments = new Map<number, string>(); // color -> playerId
+  private mechanicManager = new MechanicManager();
   private tickInterval: ReturnType<typeof setInterval> | null = null;
   private broadcastInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -66,6 +70,12 @@ export class Game {
         this.io.emit('player:colorChanged', { id: socket.id, color });
       });
 
+      socket.on('admin:spawnKnockback', () => {
+        const x = Math.random() * ARENA_SIZE;
+        const z = Math.random() * ARENA_SIZE;
+        this.mechanicManager.add(new RadialKnockbackMechanic(x, z, Date.now()));
+      });
+
       socket.on('disconnect', () => {
         const player = this.players.get(socket.id);
         if (player) {
@@ -89,8 +99,11 @@ export class Game {
   }
 
   private tick(): void {
-    for (const player of this.players.values()) {
-      player.processInputs();
+    const now = Date.now();
+    const players = Array.from(this.players.values());
+    this.mechanicManager.tick(now, players);
+    for (const player of players) {
+      player.processInputs(now);
     }
   }
 
@@ -104,6 +117,6 @@ export class Game {
     for (const player of this.players.values()) {
       players[player.id] = player.toState();
     }
-    return { players, timestamp: Date.now() };
+    return { players, mechanics: this.mechanicManager.getStates(), timestamp: Date.now() };
   }
 }

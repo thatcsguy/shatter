@@ -1,5 +1,6 @@
 import { PlayerInput, PlayerState, Vec3, ARENA_SIZE } from '../shared/types.js';
 import { applyPhysics, PhysicsState } from '../shared/physics.js';
+import { KnockbackState, calculateKnockbackEndpoint, getKnockbackPosition } from '../shared/knockback.js';
 
 export class Player {
   readonly id: string;
@@ -11,6 +12,7 @@ export class Player {
   rotation: number;
   targetRotation: number;
   lastProcessedInput: number;
+  knockback: KnockbackState | null;
   private inputQueue: PlayerInput[];
 
   constructor(id: string, color: number) {
@@ -23,6 +25,7 @@ export class Player {
     this.rotation = 0;
     this.targetRotation = 0;
     this.lastProcessedInput = 0;
+    this.knockback = null;
     this.inputQueue = [];
   }
 
@@ -30,8 +33,25 @@ export class Player {
     this.inputQueue.push(input);
   }
 
-  processInputs(): void {
+  processInputs(now: number): void {
+    // Update knockback position and check expiry
+    if (this.knockback) {
+      const kb = getKnockbackPosition(this.knockback, now);
+      this.position.x = kb.x;
+      this.position.z = kb.z;
+      if (!kb.active) {
+        this.knockback = null;
+        this.velocity = { x: 0, y: this.velocity.y, z: 0 };
+      }
+    }
+
     for (const input of this.inputQueue) {
+      if (this.knockback) {
+        // During knockback, skip movement but still ack input
+        this.lastProcessedInput = input.seq;
+        continue;
+      }
+
       const state: PhysicsState = {
         position: { ...this.position },
         velocity: { ...this.velocity },
@@ -53,8 +73,32 @@ export class Player {
     this.inputQueue = [];
   }
 
+  applyKnockback(dirX: number, dirZ: number, distance: number, duration: number, now: number): void {
+    if (this.knockback) return; // No stacking
+
+    const { endX, endZ } = calculateKnockbackEndpoint(
+      this.position.x,
+      this.position.z,
+      dirX,
+      dirZ,
+      distance,
+    );
+
+    this.knockback = {
+      startX: this.position.x,
+      startZ: this.position.z,
+      endX,
+      endZ,
+      startTime: now,
+      duration,
+    };
+
+    // Zero horizontal velocity during knockback
+    this.velocity = { x: 0, y: this.velocity.y, z: 0 };
+  }
+
   toState(): PlayerState {
-    return {
+    const state: PlayerState = {
       id: this.id,
       position: { ...this.position },
       velocity: { ...this.velocity },
@@ -65,5 +109,9 @@ export class Player {
       lastProcessedInput: this.lastProcessedInput,
       color: this.color,
     };
+    if (this.knockback) {
+      state.knockback = { ...this.knockback };
+    }
+    return state;
   }
 }

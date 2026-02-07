@@ -47,10 +47,24 @@ export interface PlayerState {
   targetRotation: number;
   lastProcessedInput: number;
   color: number;
+  knockback?: {
+    startX: number;
+    startZ: number;
+    endX: number;
+    endZ: number;
+    startTime: number;
+    duration: number;
+  };
+}
+
+export interface MechanicStateData {
+  type: string;
+  [key: string]: unknown;
 }
 
 export interface GameState {
   players: Record<string, PlayerState>;
+  mechanics: MechanicStateData[];
   timestamp: number;
 }
 
@@ -66,4 +80,5 @@ export interface ClientToServerEvents {
   'game:input': (input: PlayerInput) => void;
   'game:join': () => void;
   'player:colorChange': (data: { color: number }) => void;
+  'admin:spawnKnockback': () => void;
 }

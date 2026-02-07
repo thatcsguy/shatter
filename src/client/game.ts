@@ -4,6 +4,7 @@ import { CameraController } from './camera.js';
 import { SceneManager } from './scene.js';
 import { HUD } from './hud.js';
 import { ColorPicker } from './colorPicker.js';
+import { MechanicRenderer } from './mechanicRenderer.js';
 
 export class ClientGame {
   private input: InputManager;
@@ -12,6 +13,7 @@ export class ClientGame {
   private sceneManager: SceneManager;
   private hud: HUD;
   private colorPicker: ColorPicker;
+  private mechanicRenderer: MechanicRenderer;
   private lastTime = 0;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -19,8 +21,9 @@ export class ClientGame {
     this.network = new NetworkManager();
     this.camera = new CameraController(canvas, this.input);
     this.sceneManager = new SceneManager(canvas);
-    this.hud = new HUD();
+    this.hud = new HUD(() => this.network.spawnKnockback());
     this.colorPicker = new ColorPicker();
+    this.mechanicRenderer = new MechanicRenderer(this.sceneManager.scene);
     this.colorPicker.setOnColorSelect((color) => {
       this.network.requestColorChange(color);
     });
@@ -88,6 +91,9 @@ export class ClientGame {
       const takenColors = this.network.getTakenColors();
       this.colorPicker.update(localColor, takenColors, this.network.localId);
     }
+
+    // Update mechanic visuals
+    this.mechanicRenderer.update(this.network.mechanics);
 
     // Render
     this.sceneManager.render(this.camera.camera);

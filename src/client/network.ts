@@ -3,6 +3,7 @@ import {
   PlayerInput,
   GameState,
   PlayerState,
+  MechanicStateData,
   Vec3,
   INTERPOLATION_BUFFER_SIZE,
   INTERPOLATION_DELAY_MS,
@@ -10,6 +11,7 @@ import {
   ClientToServerEvents,
 } from '../shared/types.js';
 import { applyPhysics, PhysicsState, normalizeAngle } from '../shared/physics.js';
+import { KnockbackState, getKnockbackPosition } from '../shared/knockback.js';
 
 interface Snapshot {
   timestamp: number;
@@ -30,12 +32,16 @@ export class NetworkManager {
   private _localState: PhysicsState | null = null;
   private _playerCount = 0;
   private _ping = 0;
+  private _localKnockback: KnockbackState | null = null;
+  private _mechanics: MechanicStateData[] = [];
 
   get localId(): string | null { return this._localId; }
   get localState(): PhysicsState | null { return this._localState; }
   get playerCount(): number { return this._playerCount; }
   get ping(): number { return this._ping; }
   get pendingCount(): number { return this.pendingInputs.length; }
+  get localKnockback(): KnockbackState | null { return this._localKnockback; }
+  get mechanics(): MechanicStateData[] { return this._mechanics; }
 
   constructor() {
     this.socket = io({ autoConnect: false });
@@ -59,6 +65,7 @@ export class NetworkManager {
     this.socket.on('game:state', (state) => {
       this.latestState = state;
       this._playerCount = Object.keys(state.players).length;
+      this._mechanics = state.mechanics ?? [];
 
       // Reconcile local player
       if (this._localId && state.players[this._localId]) {
@@ -98,6 +105,25 @@ export class NetworkManager {
   sendInput(input: PlayerInput): void {
     if (!this._localState) return;
 
+    // During knockback, update position from knockback physics instead of input
+    if (this._localKnockback) {
+      const kb = getKnockbackPosition(this._localKnockback, Date.now());
+      this._localState.position.x = kb.x;
+      this._localState.position.z = kb.z;
+      if (!kb.active) {
+        this._localKnockback = null;
+        this._localState.velocity = { x: 0, y: this._localState.velocity.y, z: 0 };
+      }
+      // Still send input for seq tracking, but don't predict movement
+      this.pendingInputs.push({
+        ...input,
+        predictedPosition: { ...this._localState.position },
+        predictedRotation: this._localState.rotation,
+      });
+      this.socket.emit('game:input', input);
+      return;
+    }
+
     // Predict locally
     const predicted = applyPhysics(this._localState, input);
     this._localState = predicted;
@@ -117,6 +143,13 @@ export class NetworkManager {
       (i) => i.seq > serverState.lastProcessedInput
     );
 
+    // Sync knockback state from server
+    if (serverState.knockback) {
+      this._localKnockback = { ...serverState.knockback };
+    } else {
+      this._localKnockback = null;
+    }
+
     // Reset to server authoritative state
     let state: PhysicsState = {
       position: { ...serverState.position },
@@ -126,6 +159,15 @@ export class NetworkManager {
       rotation: serverState.rotation,
       targetRotation: serverState.targetRotation,
     };
+
+    // During knockback, use knockback position instead of replaying inputs
+    if (this._localKnockback) {
+      const kb = getKnockbackPosition(this._localKnockback, Date.now());
+      state.position.x = kb.x;
+      state.position.z = kb.z;
+      this._localState = state;
+      return;
+    }
 
     // Replay unacknowledged inputs
     for (const input of this.pendingInputs) {
@@ -182,6 +224,10 @@ export class NetworkManager {
 
   requestColorChange(color: number): void {
     this.socket.emit('player:colorChange', { color });
+  }
+
+  spawnKnockback(): void {
+    this.socket.emit('admin:spawnKnockback');
   }
 
   getTakenColors(): Map<number, string> {

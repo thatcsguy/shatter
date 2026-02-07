@@ -57,7 +57,7 @@ function makePlayerState(overrides: Partial<PlayerState> = {}): PlayerState {
 }
 
 function makeGameState(players: Record<string, PlayerState>, timestamp = 1000): GameState {
-  return { players, timestamp };
+  return { players, mechanics: [], timestamp };
 }
 
 function joinGame(nm: NetworkManager, id = 'local'): void {
@@ -225,6 +225,8 @@ describe('NetworkManager', () => {
           velocity: { x: 0, y: 0, z: 0 },
           isGrounded: true,
           jumpHorizontalVelocity: { x: 0, y: 0, z: 0 },
+          rotation: 0,
+          targetRotation: 0,
         },
         makeInput({ seq: 1, dz: 1, jump: true, dt }),
       );
