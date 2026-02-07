@@ -3,7 +3,7 @@ import { applyPhysics, PhysicsState } from '../shared/physics.js';
 
 export class Player {
   readonly id: string;
-  readonly color: number;
+  color: number;
   position: Vec3;
   velocity: Vec3;
   isGrounded: boolean;

@@ -3,6 +3,7 @@ import { NetworkManager } from './network.js';
 import { CameraController } from './camera.js';
 import { SceneManager } from './scene.js';
 import { HUD } from './hud.js';
+import { ColorPicker } from './colorPicker.js';
 
 export class ClientGame {
   private input: InputManager;
@@ -10,6 +11,7 @@ export class ClientGame {
   private camera: CameraController;
   private sceneManager: SceneManager;
   private hud: HUD;
+  private colorPicker: ColorPicker;
   private lastTime = 0;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -18,6 +20,10 @@ export class ClientGame {
     this.camera = new CameraController(canvas, this.input);
     this.sceneManager = new SceneManager(canvas);
     this.hud = new HUD();
+    this.colorPicker = new ColorPicker();
+    this.colorPicker.setOnColorSelect((color) => {
+      this.network.requestColorChange(color);
+    });
   }
 
   start(): void {
@@ -75,6 +81,13 @@ export class ClientGame {
       pendingInputs: this.network.pendingCount,
       bufferSize: firstOtherId ? this.network.getBufferSize(firstOtherId) : 0,
     });
+
+    // Update color picker
+    if (this.network.localId) {
+      const localColor = this.network.getPlayerColor(this.network.localId);
+      const takenColors = this.network.getTakenColors();
+      this.colorPicker.update(localColor, takenColors, this.network.localId);
+    }
 
     // Render
     this.sceneManager.render(this.camera.camera);

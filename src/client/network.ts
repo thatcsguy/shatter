@@ -82,6 +82,12 @@ export class NetworkManager {
     this.socket.on('game:playerLeft', (id) => {
       this.interpolationBuffers.delete(id);
     });
+
+    this.socket.on('player:colorChanged', ({ id, color }) => {
+      if (this.latestState && this.latestState.players[id]) {
+        this.latestState.players[id].color = color;
+      }
+    });
   }
 
   connect(): void {
@@ -172,5 +178,18 @@ export class NetworkManager {
 
   getBufferSize(id: string): number {
     return this.interpolationBuffers.get(id)?.length ?? 0;
+  }
+
+  requestColorChange(color: number): void {
+    this.socket.emit('player:colorChange', { color });
+  }
+
+  getTakenColors(): Map<number, string> {
+    const taken = new Map<number, string>();
+    if (!this.latestState) return taken;
+    for (const [id, player] of Object.entries(this.latestState.players)) {
+      taken.set(player.color, id);
+    }
+    return taken;
   }
 }

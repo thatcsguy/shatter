@@ -10,7 +10,16 @@ export const INTERPOLATION_BUFFER_SIZE = 20;
 export const INTERPOLATION_DELAY_MS = 100;
 export const PLAYER_HEIGHT = 2.15;
 
-export const PLAYER_COLORS = [0x4a90d9, 0xe74c3c, 0x2ecc71, 0xf39c12] as const;
+export const PLAYER_COLORS = [
+  0xe74c3c, // red
+  0xf39c12, // orange
+  0xf1c40f, // yellow
+  0x2ecc71, // green
+  0x4a90d9, // blue
+  0x9b59b6, // purple
+  0xffffff, // white
+  0x555555, // darkgray
+] as const;
 
 // --- Interfaces ---
 export interface Vec3 {
@@ -50,9 +59,11 @@ export interface ServerToClientEvents {
   'game:state': (state: GameState) => void;
   'game:joined': (data: { id: string; state: GameState }) => void;
   'game:playerLeft': (id: string) => void;
+  'player:colorChanged': (data: { id: string; color: number }) => void;
 }
 
 export interface ClientToServerEvents {
   'game:input': (input: PlayerInput) => void;
   'game:join': () => void;
+  'player:colorChange': (data: { color: number }) => void;
 }

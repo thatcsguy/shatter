@@ -40,12 +40,15 @@ export class SceneManager {
   }
 
   getOrCreatePlayer(id: string, color: number): CharacterMesh {
-    if (!this.playerMeshes.has(id)) {
-      const mesh = new CharacterMesh(color);
-      this.playerMeshes.set(id, mesh);
-      this.scene.add(mesh);
+    const existing = this.playerMeshes.get(id);
+    if (existing) {
+      existing.setColor(color);
+      return existing;
     }
-    return this.playerMeshes.get(id)!;
+    const mesh = new CharacterMesh(color);
+    this.playerMeshes.set(id, mesh);
+    this.scene.add(mesh);
+    return mesh;
   }
 
   removePlayer(id: string): void {

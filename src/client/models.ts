@@ -96,10 +96,12 @@ export class CharacterMesh extends THREE.Group {
   private leftLegPivot: THREE.Group;
   private rightLegPivot: THREE.Group;
   private animPhase = { value: 0 };
+  private bodyMaterial: THREE.MeshLambertMaterial;
 
   constructor(color: number) {
     super();
     const mat = new THREE.MeshLambertMaterial({ color });
+    this.bodyMaterial = mat;
 
     // Head: big rounded box (~half the character height)
     const headGeo = createRoundedBoxGeo(0.9, 0.95, 0.85, 0.15, 6);
@@ -127,6 +129,10 @@ export class CharacterMesh extends THREE.Group {
     this.leftLegPivot = makeLimbPivot(new THREE.Vector3(-0.14, 0.45, 0), legGeo, mat, 0.2);
     this.rightLegPivot = makeLimbPivot(new THREE.Vector3(0.14, 0.45, 0), legGeo, mat, 0.2);
     this.add(this.leftLegPivot, this.rightLegPivot);
+  }
+
+  setColor(color: number): void {
+    this.bodyMaterial.color.setHex(color);
   }
 
   animate(velocity: { x: number; z: number }, dt: number): void {
